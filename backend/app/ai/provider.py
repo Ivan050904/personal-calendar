@@ -51,6 +51,7 @@ class OpenAICompatibleProvider:
             "model": self.model,
             "messages": context_messages(user_message, context),
             "temperature": 0.1,
+            "max_tokens": 2048,
         }
         # Some providers support json_object; retry without it if rejected.
         variants = [
@@ -86,7 +87,15 @@ class OpenAICompatibleProvider:
                         )
                         continue
                     body = response.json()
-                    content = body["choices"][0]["message"]["content"]
+                    message = body["choices"][0]["message"]
+                    content = message.get("content") or message.get("reasoning_content")
+                    if not isinstance(content, str) or not content.strip():
+                        last_error = AppError(
+                            "ai_provider_error",
+                            "AI provider returned empty content",
+                            status_code=502,
+                        )
+                        continue
                     return parse_structured_action(content)
                 except (httpx.TimeoutException, httpx.TransportError, KeyError, ValueError) as exc:
                     last_error = exc
