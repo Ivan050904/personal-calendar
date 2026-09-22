@@ -1,0 +1,110 @@
+.week-calendar { margin-top: 8px; }
+
+.month-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.month-controls strong {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.week-grid {
+  display: grid;
+  grid-template-columns: 68px repeat(7, minmax(110px, 1fr));
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.week-day-head,
+.week-time-head {
+  min-height: 48px;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  color: var(--text);
+  background: var(--surface-2);
+  font-family: var(--font-ui);
+}
+
+.week-day-head.is-selected {
+  color: var(--accent-contrast);
+  background: var(--accent);
+}
+
+.week-row { display: contents; }
+
+.week-row > span {
+  height: 64px;
+  padding: 8px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: var(--surface);
+}
+
+.week-cell {
+  position: relative;
+  height: 64px;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.week-event {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
+  padding: 4px 6px;
+  color: var(--text);
+  font-size: 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--event-bg, var(--accent)) 24%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--event-bg, var(--accent)) 50%, var(--border));
+  border-left: 3px solid var(--event-bg, var(--accent));
+}
+
+.week-event:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (max-width: 600px) {
+  .week-grid {
+    grid-template-columns: 52px repeat(7, minmax(72px, 1fr));
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .week-time-head,
+  .week-row > span {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    box-shadow: 1px 0 0 var(--border);
+  }
+
+  .week-time-head {
+    background: var(--surface-2);
+  }
+
+  .week-row > span {
+    background: var(--surface);
+    height: 56px;
+  }
+
+  .week-day-head {
+    min-height: 48px;
+  }
+
+  .week-cell {
+    height: 56px;
+    min-height: 56px;
+  }
+}

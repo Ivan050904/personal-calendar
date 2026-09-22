@@ -1,0 +1,17 @@
+﻿node_modules
+dist
+coverage
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+__pycache__/
+.venv/
+venv/
+backend/.venv/
+backend/tmp_whisper_bench/
+backend/*.egg-info/
+*.egg-info/
+*.wav

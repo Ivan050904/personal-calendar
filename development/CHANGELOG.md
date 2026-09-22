@@ -1,0 +1,107 @@
+# Changelog
+
+## Unreleased
+
+### Added (Production deploy · D18)
+
+- Live at https://calendar.folio-one.ru (HTTPS, login gate).
+- Host systemd API/SPA + Docker MariaDB; nginx via billing-nginx; `scripts/deploy_calendar.py`.
+- Decision D18 recorded in `docs/17_DECISIONS.md`.
+
+### Added (Single-user auth · D17)
+
+- Login page as first screen in API mode; session cookie after `POST /api/auth/login`.
+- Backend protects API when `AUTH_USERNAME` / `AUTH_PASSWORD` / `AUTH_SESSION_SECRET` are set; logout in Settings.
+- Decision D17 recorded; `docs/15_SECURITY.md` and API contract updated.
+
+### Changed (Assistant draft recurrence · D16)
+
+- Draft card shows date/time and recurrence summary («Без повтора» / weekly days) before confirm.
+- «Изменить форму» includes Повтор + weekdays for create-event; PATCH can clear recurrence.
+- Speech parse: «повторником» → weekly Tue; «название X» strips cue word from title.
+- Decision D16 recorded in `docs/17_DECISIONS.md`.
+
+### Changed (Assistant as primary section · D15)
+
+- «Ассистент» in left sidebar / bottom tabs as its own screen (not a calendar overlay).
+- Removed toolbar «Ассистент» button and drawer; chat history kept while switching sections.
+- Decision D15 recorded in `docs/17_DECISIONS.md`.
+
+### Changed (Left sidebar nav · D14)
+
+- Desktop: primary nav moved to sticky left sidebar; calendar header starts higher.
+- Sidebar collapse via bottom chevron (‹ / ›); preference saved in localStorage.
+- Mobile ≤600px: bottom tabs unchanged (D11); collapse control hidden.
+- Decision D14 recorded in `docs/17_DECISIONS.md`.
+
+### Changed (Pink accent + flat sections · D13)
+
+- App-wide dusty rose accent and warm neutrals (replaces navy/blue-gray tokens).
+- Tasks / Lists / Trash: flat layout — line composer, divider rows, no nested cards or section eyebrow.
+- Decision D13 recorded in `docs/17_DECISIONS.md`.
+
+### Changed (Tasks / Lists / Trash craft · D12)
+
+- Tasks: composer separated from list; buckets «Без даты» / «Сегодня» (+ focus date); TaskRow with due chip and secondary delete.
+- Lists / Trash / Today dock reuse the same row and panel craft (D10 tokens).
+- Decision D12 recorded in `docs/17_DECISIONS.md`.
+
+### Changed (Mobile adaptation · D11)
+
+- Bottom tab bar (≤600px) with safe-area; scrollable calendar toolbar; FAB for new event.
+- Day: horizontal swipe only when |dx| > |dy|; drag/resize off on coarse pointer.
+- Week: sticky time column + touch scroll; month larger hit targets.
+- Assistant fullscreen sheet with close; event form sticky Save/Cancel.
+
+### Changed (Frontend UI overhaul · D10)
+
+- Primary nav: Calendar / Tasks / Lists / Trash / Settings; startup on Today day view.
+- Smart Day as calendar sub-view «Сейчас»; Assistant as keep-mounted drawer from calendar toolbar.
+- Slate/ink visual system; day now-line + dimmed past; unified week/month/chat craft.
+- Event form progressive disclosure; scope dialog single primary; RU draft/trash labels; delete confirm.
+- Search hits navigate to entity; active nav uses `aria-current="page"`.
+
+### Changed (MySQL SSOT)
+
+- Board defaults to FastAPI/MySQL (`VITE_USE_API=true`). IndexedDB only if explicitly `false`.
+- Removed AI confirm → IndexedDB dual-write (`apply-ai-draft-local`).
+- Decision D9 recorded in `docs/17_DECISIONS.md`.
+
+### Fixed (logic audit)
+
+- `get_local_calendar` prefers `Personal Calendar`, else earliest `createdAt`.
+- Confirm idempotency flag `result.idempotent` (server-side).
+- CLARIFY drafts promote to CREATE when required fields are filled.
+- Event time without explicit day asks for date (change spec); clock bounds use calendar timezone.
+- Ambiguous target errors list candidate titles in the assistant chat.
+- TargetResolver ignores command words in the query.
+
+### Added
+
+- Waves 0–15 phase-2 implementation on top of the existing frontend MVP.
+- Wave 0 audit: React/Vite/TS + IndexedDB frontend green; MariaDB local for MySQL-compatible storage.
+- Wave 1: FastAPI foundation (`backend/`), config, Alembic, `/api/health`, stable errors.
+- Wave 2: MySQL entity tables + SQLAlchemy repositories (Calendar/Event/Plan/Task/List/…).
+- Wave 3: CRUD `/api/entities/*` + frontend `ApiRepository` (`VITE_USE_API`).
+- Wave 4: Smart Day screen «Сейчас» + `/api/smart-day`.
+- Wave 5: Plan progress `completed/total/percentage` (UI + `/api/plans/{id}/progress`).
+- Waves 6–8: AIProvider (mock/OpenAI-compatible), behavior heuristics, draft engine (`ai_drafts`).
+- Waves 9–10: CREATE/UPDATE/DELETE execution + TargetSelector resolution.
+- Wave 11: Assistant UI (`AiChatPanel`) with draft confirm/cancel/voice shell.
+- Wave 12: `/api/ai/transcribe` + local `openai/whisper` from GitHub; benchmark on RTX 3050 → model `small`.
+- Wave 13: AI rate limit middleware; secrets stay in `.env` / `secrets/` (gitignored).
+- Wave 14: real Groq smoke (`openai/gpt-oss-20b`); E2E path Frontend→API→MySQL via `VITE_USE_API`.
+- Wave 15: final audit docs/changelog; frontend 58 tests + backend 29+smoke green.
+
+### Notes
+
+- Frontend MVP docs archived under `docs/mvp-frontend/`.
+- Docker not used (per MVP spec).
+- NVIDIA key also present in `secrets/key.txt`; default provider configured to Groq after model availability check.
+
+## Package baseline (from calendar_final_cursor_package)
+
+- Finalized Smart Day + AI + backend specification.
+- Backend: FastAPI + MySQL.
+- Docker explicitly removed from MVP requirements.
+- 16-wave roadmap + AI/Draft/Whisper/security specs.
