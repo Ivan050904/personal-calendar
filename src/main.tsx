@@ -18,8 +18,8 @@ import { App, type AppServices } from './presentation/App'
 import { LoginPage } from './presentation/LoginPage'
 import type { Reminder } from './domain/models'
 import type { Repositories } from './application/repositories'
-import './presentation/app-shell.css'
 import './presentation/day-calendar.css'
+import './presentation/app-shell.css'
 
 const root = createRoot(document.getElementById('root')!)
 

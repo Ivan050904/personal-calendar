@@ -1021,3 +1021,81 @@
   margin-top: 4px;
   width: 100%;
 }
+
+/* Mobile shell — must stay after base .app-nav/.app-sidebar rules so row bottom
+   tabs are not overridden back to a tall desktop column (that hid all content). */
+@media (max-width: 600px) {
+  .calendar-app {
+    grid-template-columns: 1fr;
+    padding: 0;
+    min-height: 100dvh;
+  }
+
+  .calendar-app .app-sidebar {
+    display: contents;
+  }
+
+  .calendar-app .app-sidebar-brand,
+  .calendar-app .app-sidebar-toggle {
+    display: none;
+  }
+
+  .calendar-app .app-sidebar.is-collapsed .app-nav,
+  .calendar-app .app-nav {
+    display: flex;
+    position: fixed;
+    z-index: 60;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    flex: 0 0 auto;
+    align-items: stretch;
+    justify-content: space-around;
+    gap: 0;
+    margin: 0;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+    border-right: 0;
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .calendar-app .app-nav button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    border: 0;
+    border-radius: 10px;
+    padding: 8px 4px;
+    font-size: 0.72rem;
+    line-height: 1.15;
+    text-align: center;
+    background: transparent;
+    color: var(--text);
+  }
+
+  .calendar-app .app-nav button[aria-current="page"] {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--text);
+  }
+
+  .calendar-app .app-main {
+    padding: 12px 10px calc(72px + env(safe-area-inset-bottom, 0px));
+    max-width: none;
+    min-height: 0;
+  }
+
+  .assistant-section .chat-shell {
+    height: calc(100dvh - 72px - env(safe-area-inset-bottom, 0px));
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+  }
+}

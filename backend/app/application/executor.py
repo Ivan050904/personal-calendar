@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
@@ -15,7 +16,28 @@ def _now() -> datetime:
 
 
 def _iso(value: datetime) -> str:
-    return value.isoformat()
+    return value.replace(microsecond=0).isoformat() + "Z"
+
+
+def _to_utc_naive(value: str | datetime, calendar_tz: str | None) -> datetime:
+    """Normalize event bounds to naive UTC.
+
+    - Strings with Z/offset are converted to UTC.
+    - Naive strings (AI wall-clock) are interpreted in the calendar timezone.
+    """
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        if calendar_tz:
+            try:
+                parsed = parsed.replace(tzinfo=ZoneInfo(calendar_tz))
+            except Exception:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+        else:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0)
 
 
 class DomainExecutor:
@@ -159,9 +181,10 @@ class DomainExecutor:
         end = payload.get("end") or payload.get("endAt")
         if not title or not start:
             raise AppError("validation_error", "Event requires title and start", status_code=422)
-        start_dt = datetime.fromisoformat(str(start).replace("Z", "+00:00")).replace(tzinfo=None)
+        calendar_tz = payload.get("timezone") or "UTC"
+        start_dt = _to_utc_naive(str(start), calendar_tz)
         if end:
-            end_dt = datetime.fromisoformat(str(end).replace("Z", "+00:00")).replace(tzinfo=None)
+            end_dt = _to_utc_naive(str(end), calendar_tz)
         elif payload.get("durationMinutes"):
             end_dt = start_dt + timedelta(minutes=int(payload["durationMinutes"]))
         else:
@@ -194,7 +217,7 @@ class DomainExecutor:
                 "description": payload.get("description") or payload.get("notes") or "",
                 "startAt": _iso(start_dt),
                 "endAt": _iso(end_dt),
-                "timezone": payload.get("timezone") or "UTC",
+                "timezone": calendar_tz,
                 "allDay": bool(payload.get("allDay", False)),
                 "categoryId": payload.get("categoryId"),
                 "color": payload.get("color") or "#0f766e",
@@ -211,15 +234,16 @@ class DomainExecutor:
         if not title or not start or not end:
             raise AppError("validation_error", "Plan requires title, start and end", status_code=422)
         now = _now()
+        calendar_tz = payload.get("timezone") or "UTC"
         plan = self.repos.plans.put(
             {
                 "id": str(uuid4()),
                 "calendarId": self._calendar_id(payload),
                 "title": title,
                 "description": payload.get("description"),
-                "startAt": str(start).replace("Z", ""),
-                "endAt": str(end).replace("Z", ""),
-                "timezone": payload.get("timezone") or "UTC",
+                "startAt": _iso(_to_utc_naive(str(start), calendar_tz)),
+                "endAt": _iso(_to_utc_naive(str(end), calendar_tz)),
+                "timezone": calendar_tz,
                 "color": payload.get("color") or "#0f766e",
                 "createdAt": _iso(now),
                 "updatedAt": _iso(now),

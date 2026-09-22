@@ -59,8 +59,8 @@ def test_calendar_and_event_roundtrip(repos: Repositories, db_session: Session):
             "calendarId": calendar["id"],
             "title": "Standup",
             "description": "",
-            "startAt": start.isoformat(),
-            "endAt": end.isoformat(),
+            "startAt": start.isoformat() + "Z",
+            "endAt": end.isoformat() + "Z",
             "timezone": "Asia/Vladivostok",
             "allDay": False,
             "color": "#0d9488",
@@ -78,6 +78,44 @@ def test_calendar_and_event_roundtrip(repos: Repositories, db_session: Session):
     listed = repos.events.list_by_calendar_id("cal-1")
     assert len(listed) == 1
     assert listed[0]["id"] == event["id"]
+    assert listed[0]["startAt"].endswith("Z")
+    assert listed[0]["endAt"].endswith("Z")
+
+
+def test_event_utc_z_roundtrip_preserves_instant(repos: Repositories, db_session: Session):
+    """Frontend stores UTC with Z; API must return Z so browsers do not treat it as local."""
+    now = "2026-09-22T00:00:00Z"
+    repos.calendars.put(
+        {
+            "id": "cal-tz",
+            "name": "Personal Calendar",
+            "timezone": "Asia/Vladivostok",
+            "createdAt": now,
+            "updatedAt": now,
+        }
+    )
+    # 16:00 Asia/Vladivostok == 06:00 UTC
+    saved = repos.events.put(
+        {
+            "id": "evt-tz",
+            "calendarId": "cal-tz",
+            "title": "Offset check",
+            "description": "",
+            "startAt": "2026-09-22T06:00:00.000Z",
+            "endAt": "2026-09-22T07:00:00.000Z",
+            "timezone": "Asia/Vladivostok",
+            "allDay": False,
+            "color": "#0d9488",
+            "createdAt": now,
+            "updatedAt": now,
+        }
+    )
+    db_session.commit()
+    assert saved["startAt"] == "2026-09-22T06:00:00Z"
+    assert saved["endAt"] == "2026-09-22T07:00:00Z"
+    loaded = repos.events.get("evt-tz")
+    assert loaded is not None
+    assert loaded["startAt"] == "2026-09-22T06:00:00Z"
 
 
 def test_task_due_date_is_date_only(repos: Repositories, db_session: Session):

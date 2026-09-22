@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Generic, TypeVar
 
 from sqlalchemy import select
@@ -12,19 +12,32 @@ TModel = TypeVar("TModel")
 
 
 def _iso(value: datetime | date | None) -> str | None:
+    """Serialize datetimes as UTC ISO-8601 with Z.
+
+    DB stores naive UTC. Without the Z suffix, browsers treat the value as
+    local wall time and shift events by the device offset (e.g. -10h in
+    Asia/Vladivostok).
+    """
     if value is None:
         return None
     if isinstance(value, datetime):
-        return value.replace(microsecond=0).isoformat()
+        return value.replace(microsecond=0).isoformat() + "Z"
     return value.isoformat()
 
 
 def _parse_dt(value: str | datetime | None) -> datetime | None:
+    """Parse ISO datetimes into naive UTC for storage."""
     if value is None:
         return None
     if isinstance(value, datetime):
-        return value
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0)
+        return value.replace(microsecond=0)
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0)
+    # Naive strings from the API are treated as UTC (frontend always sends Z).
+    return parsed.replace(microsecond=0)
 
 
 def _parse_date(value: str | date | None) -> date | None:
