@@ -6,6 +6,7 @@
 
 - Live at https://calendar.folio-one.ru (HTTPS, login gate).
 - Host systemd API/SPA + Docker MariaDB; nginx via billing-nginx; `scripts/deploy_calendar.py`.
+- AI on prod routes through NL FirstByte proxy (`91.186.214.4:8787`, NVIDIA / DeepSeek) — direct Groq from Beget returns 403.
 - Decision D18 recorded in `docs/17_DECISIONS.md`.
 
 ### Added (Single-user auth · D17)
