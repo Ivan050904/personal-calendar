@@ -107,3 +107,42 @@ def test_enrich_speech_tuesday_instrumental_and_nazvanie():
     assert str(enriched.payload.get("start") or "").endswith("T15:00:00")
     assert str(enriched.payload.get("end") or "").endswith("T16:00:00")
     assert enriched.payload.get("recurrence") == {"frequency": "weekly", "interval": 1, "weekdays": [2]}
+
+
+def test_heuristic_today_na_clock_time():
+    """Speech: «на сегодня на 20.00 …» — day + time, not ask for date again."""
+    action = heuristic_propose(
+        "Создай события на сегодня на 20.00 напомнить мане порадовать лысого.",
+        timezone="Asia/Vladivostok",
+    )
+    assert action is not None
+    assert action.intent == "CREATE"
+    assert action.missing_fields == []
+    assert str(action.payload.get("start") or "").endswith("T20:00:00")
+    assert str(action.payload.get("end") or "").endswith("T21:00:00")
+    title = str(action.payload.get("title") or "").lower()
+    assert "20" not in title
+    assert "сегодня" not in title
+    assert "напомнить" in title or "лысого" in title
+
+
+def test_enrich_model_startdate_gap_with_today_na_time():
+    raw = StructuredAction(
+        intent="CLARIFY",
+        entity_type="event",
+        clarification="Укажите дату",
+        missing_fields=["startDate", "date"],
+        payload={"title": "на на 20 00 напомнить мане порадовать лысого"},
+    )
+    enriched = enrich_action_from_message(
+        raw,
+        "Создай события на сегодня на 20.00 напомнить мане порадовать лысого.",
+        timezone="UTC",
+    )
+    assert enriched.intent == "CREATE"
+    assert enriched.missing_fields == []
+    assert enriched.clarification is None
+    assert str(enriched.payload.get("start") or "").endswith("T20:00:00")
+    title = str(enriched.payload.get("title") or "").lower()
+    assert "напомнить" in title
+    assert "20" not in title

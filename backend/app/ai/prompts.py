@@ -27,6 +27,7 @@ All mutations require backend validation and explicit user confirmation.
 For recurring events, update/delete requires an explicit scope: occurrence, this_and_following, entire_series.
 
 Words such as вечером or после работы without exact time require clarification.
+«сегодня» / «завтра» / «послезавтра» count as an explicit date. «в 20:00» / «на 20.00» is an explicit clock time.
 «по вторникам» / «вторником» / weekday + «в неделю» means weekly recurrence; prefer title after «называется» / «название».
 
 Return ONLY valid JSON matching this schema:
@@ -228,6 +229,12 @@ def _guess_title(message: str) -> str:
         " ",
         cleaned,
     )
+    cleaned = re.sub(
+        r"(?i)\b(?:в|на)\s+\d{1,2}(?:[:.\s]\d{2})?\b",
+        " ",
+        cleaned,
+    )
+    cleaned = re.sub(r"(?i)\bна\b", " ", cleaned)
     cleaned = re.sub(r"(?i)\b(называется|название)\b", " ", cleaned)
     cleaned = re.sub(
         r"(?i)\b(по\s+)?(понедельник\w*|вторник\w*|повторник\w*|сред\w*|четверг\w*|пятниц\w*|суббот\w*|воскресен\w*)\b",
@@ -322,7 +329,7 @@ def _has_explicit_day(text: str) -> bool:
 
 
 def _parse_hour_minute(token: str) -> tuple[int, int] | None:
-    token = token.strip().replace(".", ":")
+    token = token.strip().replace(".", ":").replace(" ", ":")
     match = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?", token)
     if not match:
         return None
@@ -351,7 +358,7 @@ def _extract_event_bounds(
     *,
     timezone: str | None = None,
 ) -> tuple[str | None, str | None, list[str]]:
-    """Parse 'с 16 до 17' / '16:00-17:00'. Relative day or weekday counts as explicit date."""
+    """Parse 'с 16 до 17' / 'на 20.00' / 'в 20:00'. Relative day or weekday counts as explicit date."""
     from datetime import timedelta
 
     text = message.lower()
@@ -360,7 +367,7 @@ def _extract_event_bounds(
     end_hm: tuple[int, int] | None = None
 
     ranged = re.search(
-        r"(?:с\s*)?(\d{1,2}(?:[:.]\d{2})?)\s*(?:до|-|–|—)\s*(\d{1,2}(?:[:.]\d{2})?)",
+        r"(?:с\s*)?(\d{1,2}(?:[:.\s]\d{2})?)\s*(?:до|-|–|—)\s*(\d{1,2}(?:[:.\s]\d{2})?)",
         text,
     )
     if ranged:
@@ -368,7 +375,8 @@ def _extract_event_bounds(
         end_hm = _parse_hour_minute(ranged.group(2))
 
     if start_hm is None:
-        single = re.search(r"\bв\s+(\d{1,2}(?:[:.]\d{2})?)\b", text)
+        # Speech often says «на 20.00» / «на 20 00» instead of «в 20:00».
+        single = re.search(r"\b(?:в|на)\s+(\d{1,2}(?:[:.\s]\d{2})?)\b", text)
         if single:
             start_hm = _parse_hour_minute(single.group(1))
             if start_hm:
@@ -398,6 +406,21 @@ def _extract_event_bounds(
     if end_dt <= start_dt:
         end_dt = start_dt + timedelta(hours=1)
     return start_dt.isoformat(timespec="seconds"), end_dt.isoformat(timespec="seconds"), []
+
+
+def _normalize_missing_fields(fields: list[str] | None, message: str) -> list[str]:
+    mapped: list[str] = []
+    for field in fields or []:
+        if field in {"startDate", "startAt"}:
+            mapped.append("start")
+        elif field in {"endDate", "endAt"}:
+            mapped.append("end")
+        else:
+            mapped.append(field)
+    out = list(dict.fromkeys(mapped))
+    if _has_explicit_day(message):
+        out = [field for field in out if field != "date"]
+    return out
 
 
 def _extract_recurrence(message: str) -> dict[str, Any] | None:
@@ -499,10 +522,11 @@ def enrich_action_from_message(
     else:
         missing = []
 
+    model_missing = _normalize_missing_fields(next_action.missing_fields, user_message)
     if (payload.get("start") or payload.get("startAt")) and (payload.get("end") or payload.get("endAt")) and "date" not in missing:
         cleaned_missing = [
             field
-            for field in (next_action.missing_fields or [])
+            for field in model_missing
             if field not in {"start", "end", "date", "entityType", "title"}
         ]
         return next_action.model_copy(
@@ -513,10 +537,12 @@ def enrich_action_from_message(
                 "clarification": None,
             }
         )
-    merged_missing = list(dict.fromkeys([*(next_action.missing_fields or []), *missing]))
+    merged_missing = list(dict.fromkeys([*model_missing, *missing]))
     clarification = next_action.clarification
     if "date" in merged_missing:
         clarification = "Укажите дату (сегодня, завтра или точную) и при необходимости уточните время."
+    elif "start" in merged_missing or "end" in merged_missing:
+        clarification = "Уточните время начала (например: в 20:00 или на 20.00)."
     return next_action.model_copy(
         update={
             "intent": "CLARIFY" if "date" in merged_missing else next_action.intent,

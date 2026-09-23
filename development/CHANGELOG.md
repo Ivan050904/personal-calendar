@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed (AI «сегодня» + «на 20.00»)
+
+- Parse speech times `на 20.00` / `на 20 00` (not only `в …`); keep «сегодня» as explicit date so drafts fill start/end instead of asking again.
+
 ### Fixed (AI latency)
 
 - Production AI switched from slow NVIDIA DeepSeek (~50s, timeouts) to Groq `openai/gpt-oss-20b` via NL proxy (~1s).
