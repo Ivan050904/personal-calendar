@@ -1,10 +1,5 @@
 # Current Task
 
-Remote Whisper (D23) + Plans/reminders audit Must (D24).
-
-Done:
-- Prod Whisper via Groq remote only
-- Plans create/checklist on day + timeline blocks
-- Reminder poll when notifications enabled
+Whisper prod fix: route via NL Folio AI proxy (Groq path). Beget → api.groq.com is 403.
 
 STOP.

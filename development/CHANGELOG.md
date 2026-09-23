@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed (Whisper via NL proxy)
+
+- Beget cannot call `api.groq.com` (403); production Whisper goes through Folio AI proxy `/groq/v1` with the proxy token.
+
 ### Fixed (Remote Whisper · D23)
 
 - Production speech uses remote Groq Whisper (`WHISPER_BACKEND=remote`) — no local torch/whisper on Beget.

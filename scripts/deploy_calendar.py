@@ -29,6 +29,10 @@ NGINX_CONF = "/root/-Mobile-application-for-expense-tracking/backend/nginx.conf"
 CERTBOT_EMAIL = "admin@folio-one.ru"
 MARKER = f"# Personal Calendar ({DOMAIN})"
 
+# Folio AI proxy (NL). Beget cannot call api.groq.com directly (403 Forbidden).
+WHISPER_PROXY_BASE = "http://91.186.214.4:8787/groq/v1"
+WHISPER_PROXY_MODEL = "whisper-large-v3-turbo"
+
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
 DIST = ROOT / "dist"
@@ -162,9 +166,9 @@ def write_server_env(client: paramiko.SSHClient, db_password: str) -> None:
             "GROQ_BASE_URL=https://api.groq.com/openai/v1",
             "GROQ_MODEL=openai/gpt-oss-20b",
             "WHISPER_BACKEND=remote",
-            "WHISPER_API_BASE_URL=https://api.groq.com/openai/v1",
+            f"WHISPER_API_BASE_URL={WHISPER_PROXY_BASE}",
             f"WHISPER_API_KEY={groq}",
-            "WHISPER_REMOTE_MODEL=whisper-large-v3-turbo",
+            f"WHISPER_REMOTE_MODEL={WHISPER_PROXY_MODEL}",
             "WHISPER_MODEL=small",
             "",
         ]
@@ -176,29 +180,19 @@ def write_server_env(client: paramiko.SSHClient, db_password: str) -> None:
 
 
 def ensure_remote_whisper_env(client: paramiko.SSHClient) -> None:
-    """Force production Whisper to remote Groq — never install local torch/whisper on Beget."""
-    local = read_local_backend_env()
-    groq = (local.get("GROQ_API_KEY") or local.get("AI_API_KEY") or "").replace("'", "'\\''")
+    """Force production Whisper via NL Groq proxy — never local torch on Beget."""
     cmd = (
         f"ENV={APP_DIR}/backend/.env; touch \"$ENV\"; "
         "grep -q '^APP_ENV=' \"$ENV\" && sed -i 's/^APP_ENV=.*/APP_ENV=production/' \"$ENV\" || echo 'APP_ENV=production' >> \"$ENV\"; "
         "grep -q '^WHISPER_BACKEND=' \"$ENV\" && sed -i 's/^WHISPER_BACKEND=.*/WHISPER_BACKEND=remote/' \"$ENV\" || echo 'WHISPER_BACKEND=remote' >> \"$ENV\"; "
-        "grep -q '^WHISPER_API_BASE_URL=' \"$ENV\" && sed -i 's|^WHISPER_API_BASE_URL=.*|WHISPER_API_BASE_URL=https://api.groq.com/openai/v1|' \"$ENV\" || echo 'WHISPER_API_BASE_URL=https://api.groq.com/openai/v1' >> \"$ENV\"; "
-        "grep -q '^WHISPER_REMOTE_MODEL=' \"$ENV\" && sed -i 's/^WHISPER_REMOTE_MODEL=.*/WHISPER_REMOTE_MODEL=whisper-large-v3-turbo/' \"$ENV\" || echo 'WHISPER_REMOTE_MODEL=whisper-large-v3-turbo' >> \"$ENV\"; "
+        f"grep -q '^WHISPER_API_BASE_URL=' \"$ENV\" && sed -i 's|^WHISPER_API_BASE_URL=.*|WHISPER_API_BASE_URL={WHISPER_PROXY_BASE}|' \"$ENV\" || echo 'WHISPER_API_BASE_URL={WHISPER_PROXY_BASE}' >> \"$ENV\"; "
+        f"grep -q '^WHISPER_REMOTE_MODEL=' \"$ENV\" && sed -i 's/^WHISPER_REMOTE_MODEL=.*/WHISPER_REMOTE_MODEL={WHISPER_PROXY_MODEL}/' \"$ENV\" || echo 'WHISPER_REMOTE_MODEL={WHISPER_PROXY_MODEL}' >> \"$ENV\"; "
+        # Prefer proxy token (AI_API_KEY); do not use blocked direct Groq keys from Beget.
+        "A=$(grep '^AI_API_KEY=' \"$ENV\" | head -1 | cut -d= -f2-); "
+        "if [ -n \"$A\" ]; then "
+        "grep -q '^WHISPER_API_KEY=' \"$ENV\" && sed -i \"s|^WHISPER_API_KEY=.*|WHISPER_API_KEY=$A|\" \"$ENV\" || echo \"WHISPER_API_KEY=$A\" >> \"$ENV\"; "
+        "fi; "
     )
-    if groq:
-        cmd += (
-            f"grep -q '^WHISPER_API_KEY=' \"$ENV\" && sed -i 's|^WHISPER_API_KEY=.*|WHISPER_API_KEY={groq}|' \"$ENV\" || echo 'WHISPER_API_KEY={groq}' >> \"$ENV\"; "
-        )
-    else:
-        cmd += (
-            "G=$(grep '^GROQ_API_KEY=' \"$ENV\" | head -1 | cut -d= -f2-); "
-            "A=$(grep '^AI_API_KEY=' \"$ENV\" | head -1 | cut -d= -f2-); "
-            "KEY=${G:-$A}; "
-            "if [ -n \"$KEY\" ]; then "
-            "grep -q '^WHISPER_API_KEY=' \"$ENV\" && sed -i \"s|^WHISPER_API_KEY=.*|WHISPER_API_KEY=$KEY|\" \"$ENV\" || echo \"WHISPER_API_KEY=$KEY\" >> \"$ENV\"; "
-            "fi; "
-        )
     run(client, cmd)
 
 

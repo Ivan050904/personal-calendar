@@ -44,7 +44,7 @@ D21 — Calendar timezone follows the device IANA zone on boot (`ensureLocalCale
 
 D22 — Week view date arrows / keyboard jump by 7 days (not 1). Event form exposes every-N-days as frequency daily + user interval (>=2); domain already supported interval for daily generation.
 
-D23 — Production Whisper is remote only (OpenAI-compatible / Groq audio transcription). Beget does not install local torch/openai-whisper; WHISPER_BACKEND=remote. Local GPU Whisper remains optional for development.
+D23 — Production Whisper is remote via Folio AI proxy Groq path (http://91.186.214.4:8787/groq/v1). Beget IPs get 403 from api.groq.com directly; never install local torch/openai-whisper on Beget. WHISPER_BACKEND=remote; WHISPER_API_KEY uses the proxy token (same as AI_API_KEY). Local GPU Whisper remains optional for development.
 
 D24 — Plans become first-class in day dock: create plan, expand checklist, toggle/add items; plans also render on the day timeline. Browser reminders poll due offsets while the tab is open and notifications are enabled.
 
