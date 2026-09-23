@@ -57,6 +57,26 @@
   border-bottom: 1px solid var(--border);
 }
 
+.week-slot {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.week-slot:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.week-slot:focus-visible {
+  outline: none;
+  box-shadow: inset var(--focus-ring);
+}
+
 .week-event {
   position: absolute;
   z-index: 1;

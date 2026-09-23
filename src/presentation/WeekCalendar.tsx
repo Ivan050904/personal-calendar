@@ -15,6 +15,7 @@ export function WeekCalendar({
   selectedDate,
   onSelectDate,
   onEditEvent,
+  onCreateAt,
   now = () => new Date(),
   visibleHoursPref,
   boardRevision = 0,
@@ -23,6 +24,7 @@ export function WeekCalendar({
   selectedDate: string
   onSelectDate: (date: string) => void
   onEditEvent: (event: Event) => void
+  onCreateAt: (date: string, hour: number) => void
   now?: () => Date
   visibleHoursPref: VisibleHoursPreference
   boardRevision?: number
@@ -77,6 +79,12 @@ export function WeekCalendar({
             <span>{String(hour).padStart(2, '0')}:00</span>
             {days.map((day) => (
               <div className="week-cell" key={day}>
+                <button
+                  type="button"
+                  className="week-slot"
+                  aria-label={`Создать событие ${day} в ${hour}:00`}
+                  onClick={() => onCreateAt(day, hour)}
+                />
                 {segments
                   .filter((segment) => segment.date === day && Math.floor(segment.top / HOUR_ROW_PX) === hour)
                   .map((segment) => (
@@ -92,10 +100,14 @@ export function WeekCalendar({
                         width: `${100 / segment.columns}%`,
                         ['--event-bg' as string]: segment.event.color,
                       }}
-                      onClick={() => onEditEvent(segment.event)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onEditEvent(segment.event)
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
+                          event.stopPropagation()
                           onEditEvent(segment.event)
                         }
                       }}

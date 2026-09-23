@@ -165,12 +165,15 @@ export function App({
     setBoardRevision((value) => value + 1)
   }
 
-  const createAtHour = (hour: number) => {
-    const start = zonedInputToIso(`${selectedDate}T${String(hour).padStart(2, '0')}:00`, calendar.calendar.timezone)
+  const createAt = (date: string, hour: number) => {
+    const start = zonedInputToIso(`${date}T${String(hour).padStart(2, '0')}:00`, calendar.calendar.timezone)
     const end = new Date(new Date(start).getTime() + 60 * 60 * 1000).toISOString()
+    setSelectedDate(date)
     setEditing(undefined)
     setDraft({ title: '', description: '', startAt: start, endAt: end, color: DEFAULT_COLOR })
   }
+
+  const createAtHour = (hour: number) => createAt(selectedDate, hour)
 
   const createAtNow = () => createAtHour(hourInTimezone(now(), calendar.calendar.timezone))
 
@@ -464,6 +467,7 @@ export function App({
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
               onEditEvent={openEvent}
+              onCreateAt={createAt}
               now={now}
               visibleHoursPref={visibleHoursPref}
               boardRevision={boardRevision}

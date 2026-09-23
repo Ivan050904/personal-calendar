@@ -1,10 +1,8 @@
 # Current Task
 
-Timezone / week refresh fix (D21).
+Week empty-cell create event.
 
 Done:
-- Week+month reload after event save
-- Device timezone sync + wall-clock reinterpret
-- AI datetime helpers fixed
+- Click empty week cell → create form for that day/hour
 
 STOP.

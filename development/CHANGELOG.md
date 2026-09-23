@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed (Week empty-cell create)
+
+- Clicking an empty week grid cell opens the create-event form for that day and hour (same as day view hour slots).
+
 ### Fixed (Event date/time shift · D21)
 
 - Week/month calendars refresh after save (no more stale “Physical” stuck on Saturday).
