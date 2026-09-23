@@ -1,22 +1,62 @@
 .app-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
   position: sticky;
   top: 0;
   align-self: start;
   min-height: 100vh;
-  width: 200px;
-  padding: 24px 14px;
+  width: 208px;
+  padding: 22px 12px 14px;
   border-right: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 5%, var(--surface)) 0%,
+      color-mix(in srgb, var(--surface) 92%, var(--bg)) 28%,
+      color-mix(in srgb, var(--surface) 92%, var(--bg)) 100%
+    );
   transition: width 180ms ease, padding 180ms ease;
 }
 
 .app-sidebar.is-collapsed {
-  width: 52px;
-  padding: 16px 6px;
-  gap: 12px;
+  width: 56px;
+  padding: 16px 8px 12px;
+  gap: 14px;
+  align-items: center;
+}
+
+.app-sidebar-top {
+  display: flex;
+  align-items: baseline;
+  min-height: 1.6rem;
+  padding: 0 10px;
+}
+
+.app-sidebar-brand {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.app-sidebar-mark {
+  display: none;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-top {
+  justify-content: center;
+  padding: 0;
+  min-height: 40px;
   align-items: center;
 }
 
@@ -24,7 +64,12 @@
   display: none;
 }
 
-.app-sidebar.is-collapsed .app-nav-label {
+.app-sidebar.is-collapsed .app-sidebar-mark {
+  display: block;
+}
+
+.app-sidebar.is-collapsed .app-nav-label,
+.app-sidebar.is-collapsed .app-sidebar-toggle-label {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -36,21 +81,12 @@
   border: 0;
 }
 
-.app-sidebar-brand {
-  margin: 0 8px 4px;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--text);
-}
-
 .app-nav {
   display: flex;
   flex-direction: column;
   flex-wrap: nowrap;
   flex: 1 1 auto;
-  gap: 4px;
+  gap: 2px;
   margin: 0;
   width: 100%;
 }
@@ -117,25 +153,34 @@
   margin-inline: auto;
 }
 
-.app-sidebar-toggle {
+.app-sidebar-footer {
   margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  width: 100%;
+}
+
+.app-sidebar-toggle {
   width: 100%;
   min-height: var(--control-min);
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border: 0;
   border-radius: 10px;
   background: transparent;
   color: var(--text-muted);
   line-height: 1;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 500;
+  transition: background 140ms ease, color 140ms ease;
 }
 
 .app-sidebar-toggle:hover {
   background: color-mix(in srgb, var(--surface-2) 70%, transparent);
   color: var(--text);
-  border-color: var(--border);
 }
 
 .app-sidebar-toggle:focus-visible {
@@ -145,18 +190,36 @@
 
 .app-sidebar-toggle-icon {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
+  width: 18px;
+  height: 18px;
 }
 
 .app-sidebar-toggle-icon svg {
   display: block;
 }
 
+.app-sidebar-toggle-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-footer {
+  padding-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+
 .app-sidebar.is-collapsed .app-sidebar-toggle {
   width: 40px;
   min-height: 40px;
   padding: 0;
+  justify-content: center;
+  gap: 0;
 }
 
 .app-main {
@@ -246,8 +309,103 @@
 
 .task-composer {
   display: grid;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 14px;
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.task-composer-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.task-composer-title {
+  min-width: 0;
+  min-height: var(--control-min);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 10px 2px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1.05rem;
+}
+
+.task-composer-title:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+  box-shadow: none;
+}
+
+.task-composer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px 14px;
+}
+
+.task-composer-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.task-composer-field-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.task-composer-date,
+.task-composer-repeat {
+  min-height: var(--control-min);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.task-composer-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.date-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.date-shortcuts button {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.date-shortcuts button:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+
+.date-shortcuts button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-weight: 600;
 }
 
 .side-panel form.task-composer.is-line {
@@ -264,43 +422,15 @@
 
 .task-composer.is-line .task-composer-title {
   flex: 1 1 220px;
-  min-width: 0;
-  min-height: var(--control-min);
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  padding: 8px 2px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
 }
 
-.task-composer.is-line .task-composer-title:focus {
-  outline: none;
-  border-bottom-color: var(--accent);
-  box-shadow: none;
-}
-
-.task-composer.is-line .task-composer-date {
-  min-height: var(--control-min);
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  border-radius: 0;
-  padding: 8px 2px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-}
-
+.task-composer.is-line .task-composer-date,
 .task-composer.is-line .task-composer-repeat {
-  min-height: var(--control-min);
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   padding: 8px 2px;
   background: transparent;
-  color: var(--text);
-  font: inherit;
 }
 
 .task-composer.is-line .date-shortcuts {
@@ -338,6 +468,18 @@
 .list-stack {
   display: grid;
   gap: 28px;
+}
+
+@media (min-width: 900px) {
+  .tasks-panel .task-buckets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px 32px;
+    align-items: start;
+  }
+
+  .tasks-panel .task-buckets > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 
 .task-bucket,
@@ -385,12 +527,12 @@
 .side-panel .task-row,
 .side-panel .trash-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  gap: 8px 10px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px 12px;
   align-items: center;
   min-height: var(--control-min);
   margin: 0;
-  padding: 10px 2px;
+  padding: 12px 4px;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: 0;
@@ -425,6 +567,15 @@
   font-weight: 400;
 }
 
+.task-row-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
 .task-row-due {
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -444,6 +595,16 @@
 
 .task-row-delete {
   justify-self: end;
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.task-row-delete:hover {
+  color: var(--text);
 }
 
 .list-item-composer {
@@ -482,29 +643,45 @@
   overflow-wrap: anywhere;
 }
 
+.mobile-app-bar,
+.mobile-nav-backdrop,
+.app-bottom-nav,
+.mobile-sidebar-close {
+  display: none;
+}
+
 @media (max-width: 600px) {
-  .task-composer.is-line {
+  .task-composer-main {
+    grid-template-columns: 1fr;
+  }
+
+  .task-composer-main .btn-primary {
+    width: 100%;
+  }
+
+  .task-composer-meta {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .task-composer.is-line .btn-primary {
-    position: sticky;
-    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
-    z-index: 5;
+  .task-composer-field {
+    width: 100%;
   }
 
   .task-row,
   .trash-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 8px;
   }
 
-  .task-row-due,
-  .task-row-repeat,
-  .task-row-delete,
-  .trash-row .btn {
-    justify-self: start;
+  .task-row-meta {
+    grid-column: 1;
+    justify-content: flex-start;
+  }
+
+  .task-row-delete {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .list-item-composer {
@@ -1198,55 +1375,212 @@
   width: 100%;
 }
 
-/* Mobile shell — must stay after base .app-nav/.app-sidebar rules so row bottom
-   tabs are not overridden back to a tall desktop column (that hid all content). */
+/* Mobile shell — drawer sidebar + bottom tabs + top menu bar */
 @media (max-width: 600px) {
+  body.is-mobile-nav-open {
+    overflow: hidden;
+  }
+
   .calendar-app {
     grid-template-columns: 1fr;
     padding: 0;
     min-height: 100dvh;
   }
 
-  .calendar-app .app-sidebar {
-    display: contents;
+  .mobile-app-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    margin: -12px -10px 12px;
+    padding: 10px 12px calc(10px);
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
 
-  .calendar-app .app-sidebar-brand,
+  .mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    padding: 0;
+  }
+
+  .mobile-menu-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+
+  .mobile-app-bar-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: color-mix(in srgb, #000 40%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+  }
+
+  .calendar-app.is-mobile-nav-open .mobile-nav-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .calendar-app .app-sidebar {
+    display: flex;
+    position: fixed;
+    z-index: 80;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(280px, 86vw);
+    max-width: 280px;
+    min-height: 100dvh;
+    padding: 18px 12px calc(18px + env(safe-area-inset-bottom, 0px));
+    border-right: 1px solid var(--border);
+    transform: translateX(-105%);
+    transition: transform 200ms ease;
+    pointer-events: none;
+  }
+
+  .calendar-app .app-sidebar.is-collapsed {
+    width: min(280px, 86vw);
+    padding: 18px 12px calc(18px + env(safe-area-inset-bottom, 0px));
+    align-items: stretch;
+  }
+
+  .calendar-app .app-sidebar.is-mobile-open {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  .calendar-app .app-sidebar-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 4px;
+  }
+
+  .calendar-app .app-sidebar-brand {
+    display: block;
+  }
+
+  .calendar-app .app-sidebar-mark {
+    display: none;
+  }
+
+  .calendar-app .mobile-sidebar-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+
+  .calendar-app .app-sidebar-footer,
   .calendar-app .app-sidebar-toggle {
     display: none;
   }
 
-  .calendar-app .app-sidebar.is-collapsed .app-nav,
   .calendar-app .app-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    position: static;
+    height: auto;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .calendar-app .app-nav button {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+    min-height: var(--control-min);
+    font-size: 0.95rem;
+    text-align: left;
+    padding: 10px 12px;
+  }
+
+  .calendar-app .app-sidebar.is-collapsed .app-nav-label,
+  .calendar-app .app-nav-label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: nowrap;
+  }
+
+  .calendar-app .app-sidebar.is-collapsed .app-nav button {
+    justify-content: flex-start;
+    width: 100%;
+    height: auto;
+    min-height: var(--control-min);
+    padding: 10px 12px;
+    margin-inline: 0;
+  }
+
+  .app-bottom-nav {
     display: flex;
     position: fixed;
     z-index: 60;
     left: 0;
     right: 0;
     bottom: 0;
-    top: auto;
     width: 100%;
-    height: auto;
-    max-height: none;
     flex-direction: row;
     flex-wrap: nowrap;
-    flex: 0 0 auto;
     align-items: stretch;
     justify-content: space-around;
     gap: 0;
     margin: 0;
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--border);
-    border-right: 0;
     background: color-mix(in srgb, var(--surface) 94%, transparent);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
 
-  .calendar-app .app-nav button {
+  .app-bottom-nav button {
     flex: 1 1 0;
+    display: flex;
     flex-direction: column;
     justify-content: center;
+    align-items: center;
     gap: 4px;
     min-width: 0;
     min-height: 44px;
@@ -1260,16 +1594,19 @@
     color: var(--text-muted);
   }
 
-  .calendar-app .app-nav-icon {
+  .app-bottom-nav .app-nav-icon {
     width: 18px;
     height: 18px;
   }
 
-  .calendar-app .app-nav-label {
+  .app-bottom-nav .app-nav-label {
     max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .calendar-app .app-nav button[aria-current="page"] {
+  .app-bottom-nav button[aria-current="page"] {
     background: color-mix(in srgb, var(--accent) 18%, transparent);
     color: var(--accent);
     font-weight: 600;
@@ -1282,7 +1619,7 @@
   }
 
   .assistant-section .chat-shell {
-    height: calc(100dvh - 72px - env(safe-area-inset-bottom, 0px));
+    height: calc(100dvh - 120px - env(safe-area-inset-bottom, 0px));
     min-height: 0;
     border: 0;
     border-radius: 0;

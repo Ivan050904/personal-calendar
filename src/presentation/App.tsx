@@ -95,8 +95,12 @@ const NAV_ICON_PATHS: Record<NavIconId, ReactNode> = {
   ),
   settings: (
     <>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 3.5v2.2M12 18.3v2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281Z"
+      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
     </>
   ),
 }
@@ -188,6 +192,7 @@ export function App({
   const [searchQuery, setSearchQuery] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>(readStoredTheme)
   const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [visibleHoursPref, setVisibleHoursPref] = useState<VisibleHoursPreference>(readVisibleHoursPreference)
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [status, setStatus] = useState<string | undefined>()
@@ -200,6 +205,11 @@ export function App({
   const coarsePointer = useCoarsePointer()
   const allowDayDrag = !coarsePointer
 
+  const goSection = (id: Section) => {
+    setSection(id)
+    setMobileMenuOpen(false)
+  }
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     try { localStorage.setItem(THEME_STORAGE_KEY, theme) } catch { /* ignore */ }
@@ -208,6 +218,19 @@ export function App({
   useEffect(() => {
     try { localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarOpen ? '1' : '0') } catch { /* ignore */ }
   }, [sidebarOpen])
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    document.body.classList.add('is-mobile-nav-open')
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.classList.remove('is-mobile-nav-open')
+    }
+  }, [mobileMenuOpen])
 
   useEffect(() => {
     writeVisibleHoursPreference(visibleHoursPref)
@@ -440,34 +463,89 @@ export function App({
   }
 
   return (
-    <main className={`calendar-app${sidebarOpen ? '' : ' is-sidebar-collapsed'}`}>
-      <aside className={`app-sidebar${sidebarOpen ? '' : ' is-collapsed'}`}>
-        <p className="app-sidebar-brand">Calendar</p>
+    <main className={`calendar-app${sidebarOpen ? '' : ' is-sidebar-collapsed'}${mobileMenuOpen ? ' is-mobile-nav-open' : ''}`}>
+      <button
+        type="button"
+        className="mobile-nav-backdrop"
+        aria-label="Закрыть меню"
+        tabIndex={mobileMenuOpen ? 0 : -1}
+        onClick={() => setMobileMenuOpen(false)}
+      />
+      <aside
+        className={`app-sidebar${sidebarOpen ? '' : ' is-collapsed'}${mobileMenuOpen ? ' is-mobile-open' : ''}`}
+        id="app-primary-sidebar"
+      >
+        <div className="app-sidebar-top">
+          <p className="app-sidebar-brand">Calendar</p>
+          <p className="app-sidebar-mark" aria-hidden="true">C</p>
+          <button
+            type="button"
+            className="mobile-sidebar-close"
+            aria-label="Закрыть меню"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            ×
+          </button>
+        </div>
         <nav className="app-nav" aria-label="Основная навигация" id="app-primary-nav">
           {PRIMARY_NAV.map(({ id, label }) => (
-            <button type="button" key={id} aria-current={section === id ? 'page' : undefined} onClick={() => setSection(id)}>
+            <button type="button" key={id} aria-current={section === id ? 'page' : undefined} onClick={() => goSection(id)}>
               <NavIcon id={id} />
               <span className="app-nav-label">{label}</span>
             </button>
           ))}
         </nav>
-        <button
-          type="button"
-          className="app-sidebar-toggle"
-          aria-expanded={sidebarOpen}
-          aria-controls="app-primary-nav"
-          aria-label={sidebarOpen ? 'Свернуть меню' : 'Открыть меню'}
-          onClick={() => setSidebarOpen((open) => !open)}
-        >
-          <span className="app-sidebar-toggle-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
-              {sidebarOpen ? <path d="M14.5 6.5 9 12l5.5 5.5" /> : <path d="M9.5 6.5 15 12l-5.5 5.5" />}
-            </svg>
-          </span>
-        </button>
+        <div className="app-sidebar-footer">
+          <button
+            type="button"
+            className="app-sidebar-toggle"
+            aria-expanded={sidebarOpen}
+            aria-controls="app-primary-nav"
+            aria-label={sidebarOpen ? 'Свернуть меню' : 'Открыть меню'}
+            title={sidebarOpen ? 'Свернуть меню' : 'Открыть меню'}
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            <span className="app-sidebar-toggle-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+                <path d="M9.5 4.5v15" />
+                {sidebarOpen ? (
+                  <path d="M14.25 9.5 11.75 12l2.5 2.5" />
+                ) : (
+                  <path d="M12.75 9.5 15.25 12l-2.5 2.5" />
+                )}
+              </svg>
+            </span>
+            <span className="app-sidebar-toggle-label">{sidebarOpen ? 'Свернуть' : 'Меню'}</span>
+          </button>
+        </div>
       </aside>
 
+      <nav className="app-bottom-nav" aria-label="Быстрая навигация">
+        {PRIMARY_NAV.map(({ id, label }) => (
+          <button type="button" key={id} aria-current={section === id ? 'page' : undefined} onClick={() => goSection(id)}>
+            <NavIcon id={id} />
+            <span className="app-nav-label">{label}</span>
+          </button>
+        ))}
+      </nav>
+
       <div className="app-main">
+      <div className="mobile-app-bar">
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          aria-expanded={mobileMenuOpen}
+          aria-controls="app-primary-sidebar"
+          aria-label="Открыть меню"
+          onClick={() => setMobileMenuOpen(true)}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+        <p className="mobile-app-bar-title">Calendar</p>
+      </div>
       <div className="assistant-section" hidden={section !== 'assistant'}>
         <AiChatPanel onApplied={() => void refresh()} />
       </div>
@@ -1097,11 +1175,15 @@ function TaskRow({
         <input type="checkbox" checked={completed} onChange={onToggle} />
         <span className="task-row-title">{title}</span>
       </label>
-      {repeatLabel !== undefined && <span className="task-row-repeat">{repeatLabel}</span>}
-      {dueLabel !== undefined && <span className="task-row-due">{dueLabel}</span>}
+      {(repeatLabel !== undefined || dueLabel !== undefined) && (
+        <span className="task-row-meta">
+          {repeatLabel !== undefined && <span className="task-row-repeat">{repeatLabel}</span>}
+          {dueLabel !== undefined && <span className="task-row-due">{dueLabel}</span>}
+        </span>
+      )}
       {onDelete !== undefined && (
-        <button type="button" className="btn btn-ghost task-row-delete" onClick={onDelete}>
-          Удалить
+        <button type="button" className="btn btn-ghost task-row-delete" aria-label="Удалить задачу" onClick={onDelete}>
+          ×
         </button>
       )}
     </li>
@@ -1539,7 +1621,7 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
       <h1>Задачи</h1>
 
       <form
-        className="task-composer is-line"
+        className="task-composer"
         onSubmit={(event) => {
           event.preventDefault()
           const effectiveDue = dueDate === '' ? (repeat === 'never' ? undefined : today) : dueDate
@@ -1558,44 +1640,57 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
           })
         }}
       >
-        <input
-          className="task-composer-title"
-          aria-label="Название"
-          required
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Что нужно сделать"
-          autoComplete="off"
-        />
-        <div className="date-shortcuts" role="group" aria-label="Дата для новой задачи">
-          <button type="button" aria-pressed={dueDate === ''} onClick={() => { setDueDate(''); if (repeat !== 'never') setRepeat('never') }}>Без даты</button>
-          <button type="button" aria-pressed={dueDate === today} onClick={() => setDueDate(today)}>Сегодня</button>
-          <button type="button" aria-pressed={dueDate === tomorrow} onClick={() => setDueDate(tomorrow)}>Завтра</button>
-          <button type="button" aria-pressed={dueDate === nextWeek} onClick={() => setDueDate(nextWeek)}>Через неделю</button>
+        <div className="task-composer-main">
+          <input
+            className="task-composer-title"
+            aria-label="Название"
+            required
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Что нужно сделать"
+            autoComplete="off"
+          />
+          <button type="submit" className="btn btn-primary">Добавить</button>
         </div>
-        <input
-          className="task-composer-date"
-          aria-label="Дата"
-          type="date"
-          value={dueDate}
-          onChange={(event) => setDueDate(event.target.value)}
-        />
-        <select
-          className="task-composer-repeat"
-          aria-label="Повтор"
-          value={repeat}
-          onChange={(event) => {
-            const value = event.target.value as typeof repeat
-            setRepeat(value)
-            if (value !== 'never' && dueDate === '') setDueDate(today)
-          }}
-        >
-          <option value="never">Без повтора</option>
-          <option value="daily">Каждый день</option>
-          <option value="weekly">Каждую неделю</option>
-          <option value="monthly">Каждый месяц</option>
-        </select>
-        <button type="submit" className="btn btn-primary">Добавить</button>
+        <div className="task-composer-meta">
+          <div className="date-shortcuts" role="group" aria-label="Дата для новой задачи">
+            <button type="button" aria-pressed={dueDate === ''} onClick={() => { setDueDate(''); if (repeat !== 'never') setRepeat('never') }}>Без даты</button>
+            <button type="button" aria-pressed={dueDate === today} onClick={() => setDueDate(today)}>Сегодня</button>
+            <button type="button" aria-pressed={dueDate === tomorrow} onClick={() => setDueDate(tomorrow)}>Завтра</button>
+            <button type="button" aria-pressed={dueDate === nextWeek} onClick={() => setDueDate(nextWeek)}>Через неделю</button>
+          </div>
+          <label className="task-composer-field">
+            <span className="task-composer-field-label">Дата</span>
+            <input
+              className="task-composer-date"
+              aria-label="Дата"
+              type="date"
+              value={dueDate}
+              onChange={(event) => setDueDate(event.target.value)}
+            />
+          </label>
+          <label className="task-composer-field">
+            <span className="task-composer-field-label">Повтор</span>
+            <select
+              className="task-composer-repeat"
+              aria-label="Повтор"
+              value={repeat}
+              onChange={(event) => {
+                const value = event.target.value as typeof repeat
+                setRepeat(value)
+                if (value !== 'never' && dueDate === '') setDueDate(today)
+              }}
+            >
+              <option value="never">Без повтора</option>
+              <option value="daily">Каждый день</option>
+              <option value="weekly">Каждую неделю</option>
+              <option value="monthly">Каждый месяц</option>
+            </select>
+          </label>
+        </div>
+        {showFocusSection && (
+          <p className="task-composer-hint">Ниже также список на {focusHeading}</p>
+        )}
       </form>
 
       <div className="task-buckets">
@@ -1611,7 +1706,6 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
           heading="Сегодня"
           empty="На сегодня задач нет"
           tasks={todayTasks}
-          dueLabel="Сегодня"
           repeatLabels={repeatLabels}
           onToggle={(id) => { void services.tasks.toggleCompleted(id).then(refresh) }}
           onDelete={(id) => { void services.tasks.deleteTask(id).then(refresh) }}
@@ -1647,22 +1741,24 @@ function ListsSection({ services, boardRevision = 0 }: { services: AppServices; 
       <h1>Списки</h1>
 
       <form
-        className="task-composer is-line"
+        className="task-composer"
         onSubmit={(event) => {
           event.preventDefault()
           void services.lists.create({ title }).then(() => { setTitle(''); refresh() })
         }}
       >
-        <input
-          className="task-composer-title"
-          aria-label="Название списка"
-          required
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Например, Покупки"
-          autoComplete="off"
-        />
-        <button type="submit" className="btn btn-primary">Создать список</button>
+        <div className="task-composer-main">
+          <input
+            className="task-composer-title"
+            aria-label="Название списка"
+            required
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Например, Покупки"
+            autoComplete="off"
+          />
+          <button type="submit" className="btn btn-primary">Создать список</button>
+        </div>
       </form>
 
       {lists.length === 0 ? (

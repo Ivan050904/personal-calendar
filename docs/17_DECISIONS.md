@@ -20,13 +20,13 @@ D9 — MySQL via FastAPI is the single source of truth for board data. IndexedDB
 
 D10 — Frontend visual world «время под давлением»: cool slate/ink tokens (Source Serif 4 + Source Sans 3 + IBM Plex Mono), now-line and dimmed past hours on day view. Primary nav: Calendar / Tasks / Lists / Trash / Settings (Assistant later moved to top-level — see D15); Smart Day nested under Calendar; startup opens Today day view.
 
-D11 — Mobile (≤600px): primary nav becomes sticky bottom tabs with safe-area; calendar toolbar scrolls horizontally; «Новое событие» is a FAB; day drag/resize disabled on coarse pointer (swipe day change kept); week uses sticky time column + horizontal scroll. (Assistant sheet under Calendar superseded by D15.)
+D11 — Mobile (≤600px): sticky bottom tabs with safe-area remain for quick section switches; calendar toolbar scrolls horizontally; «Новое событие» is a FAB; day drag/resize disabled on coarse pointer (swipe day change kept); week uses sticky time column + horizontal scroll. Full labeled sidebar opens as a left drawer via the top hamburger (D29). (Assistant sheet under Calendar superseded by D15.)
 
 D12 — Tasks / Lists / Trash craft aligned to D10 slate/ink: composer card for create (task form fields unchanged: title + optional date + save); task list always shows «Без даты» and «Сегодня», plus a third section when composer date ≠ today; shared TaskRow (checkbox, title, due chip, secondary delete); Lists/Trash reuse the same row/section/composer pattern. No new domain fields.
 
 D13 — App-wide accent shifts from navy slate to dusty rose (`#b44a6a` light / `#e8a0b4` dark) with warm neutrals (no cool blue-gray chrome). Tasks / Lists / Trash are flat: no nested cards or «РАЗДЕЛ» eyebrow; single-line composer; list rows use hairline dividers only. Typography fonts from D10 kept.
 
-D14 — Desktop (>600px): primary nav lives in a sticky left sidebar (Calendar / Tasks / Lists / Trash / Settings), not as a top tab row. Sidebar can collapse via a bottom chevron control (preference in localStorage); collapsed rail is ~52px. Mobile (≤600px) keeps D11 bottom tabs (toggle hidden).
+D14 — Desktop (>600px): primary nav lives in a sticky left sidebar (Calendar / Tasks / Lists / Trash / Settings / Assistant), not as a top tab row. Sidebar can collapse via a bottom chevron control (preference in localStorage); collapsed rail is ~52px. Mobile drawer: D29.
 
 D15 — Assistant is a top-level primary section (sidebar / bottom tabs), not a calendar drawer overlay. Chat stays mounted while switching sections so conversation history is preserved; confirm still refreshes board data via `onApplied`.
 
@@ -55,3 +55,8 @@ D26 — Recurring tasks (ADR-015): Task may reference RecurrenceRule; create for
 D27 — All-day events: EventForm toggle «Весь день» stores allDay=true with local-day 00:00–23:59 bounds; day/week show a dedicated all-day strip; Smart Day ignores all-day (unchanged). AI phrases «весь день» / «на весь день» set allDay via enrich.
 
 D28 — Reminder PWA MVP: register /sw.js + web manifest; due reminders prefer ServiceWorkerRegistration.showNotification while the app poll runs. Background delivery is best-effort (desktop Chrome/PWA); not Google-parity on iOS Safari.
+
+D29 — Mobile navigation drawer: ≤600px shows a top app bar hamburger that opens the full labeled left sidebar as an overlay drawer (backdrop + Escape close). Bottom tabs (D11) stay for thumb-reach. Desktop collapse toggle stays desktop-only.
+
+D30 — Tasks section layout: composer is two rows (title+Add, then date shortcuts/date/repeat); desktop ≥900px shows task buckets in two columns; TaskRow groups meta chips and uses compact icon delete. Domain fields unchanged (D12/D26).
+

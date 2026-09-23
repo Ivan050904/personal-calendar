@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed (Mobile sidebar + Tasks UX)
+
+- Mobile: hamburger opens full left sidebar drawer; bottom tabs kept (D29).
+- Tasks: clearer composer (title+Add, then date/repeat); two-column buckets on wide desktop; compact row delete (D30).
+
 ### Changed (Sidebar nav polish)
 
 - Primary nav: inline SVG icons, quieter active/hover tint (no solid accent fill), icon-only rail when collapsed, SVG chevron toggle; mobile tabs use icon-over-label.
@@ -33,6 +38,11 @@
 ### Fixed (Wave 0 · AI speech time)
 
 - Parse `к 9 часам`, bare `сегодня 18:30`, and clearer draft missing-field labels (время vs дата).
+
+### Changed (Sidebar polish)
+
+- Collapse control: panel icon + «Свернуть» label in a footer with hairline (no lonely chevron box).
+- Soft top wash + collapsed brand mark «C».
 
 ### Added (Recurring tasks · D26 / ADR-015)
 
