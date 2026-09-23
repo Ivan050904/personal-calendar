@@ -1,0 +1,45 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build SPA
+        run: npm run build
+        env:
+          VITE_USE_API: "true"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deploy deps
+        run: pip install paramiko
+
+      - name: Deploy to Beget
+        env:
+          BEGET_SSH_PASSWORD: ${{ secrets.BEGET_SSH_PASSWORD }}
+        run: python scripts/deploy_calendar.py

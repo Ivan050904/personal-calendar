@@ -23,6 +23,16 @@ import type { Repositories } from '../application/repositories'
 import { exportBackup, importBackupReplace } from '../application/backup'
 import { addDays } from '../application/week-calendar'
 import { buildSmartDaySnapshot, formatDuration, type SmartDaySnapshot } from '../application/smart-day'
+import {
+  buildVisibleHours,
+  displayOffsetPx,
+  HOUR_ROW_PX,
+  normalizeVisibleHoursPreference,
+  occupiedHours,
+  readVisibleHoursPreference,
+  writeVisibleHoursPreference,
+  type VisibleHoursPreference,
+} from '../application/visible-hours'
 import './day-calendar.css'
 import { WeekCalendar } from './WeekCalendar'
 import { MonthCalendar } from './MonthCalendar'
@@ -30,7 +40,7 @@ import { AiChatPanel } from './AiChatPanel'
 import './month-calendar.css'
 import './app-shell.css'
 
-const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => hour)
 const DEFAULT_COLOR = '#475569'
 const THEME_STORAGE_KEY = 'personal-calendar-theme'
 const SIDEBAR_STORAGE_KEY = 'personal-calendar-sidebar-open'
@@ -124,6 +134,7 @@ export function App({
   const [searchQuery, setSearchQuery] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>(readStoredTheme)
   const [sidebarOpen, setSidebarOpen] = useState(readSidebarOpen)
+  const [visibleHoursPref, setVisibleHoursPref] = useState<VisibleHoursPreference>(readVisibleHoursPreference)
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [status, setStatus] = useState<string | undefined>()
   const [boardRevision, setBoardRevision] = useState(0)
@@ -141,6 +152,10 @@ export function App({
   useEffect(() => {
     try { localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarOpen ? '1' : '0') } catch { /* ignore */ }
   }, [sidebarOpen])
+
+  useEffect(() => {
+    writeVisibleHoursPreference(visibleHoursPref)
+  }, [visibleHoursPref])
 
   const refresh = async () => {
     const listed = await calendar.listEvents(selectedDate)
@@ -170,9 +185,11 @@ export function App({
     const node = dayTimelineRef.current
     if (!node) return
     const hour = now().getHours()
-    const target = Math.max(0, (hour - 1) * 64)
+    const forced = events.flatMap((event) => occupiedHours(event.startAt, event.endAt, event.timezone || calendar.calendar.timezone))
+    const visible = buildVisibleHours(visibleHoursPref, [...forced, hour])
+    const target = Math.max(0, displayOffsetPx(visible, hour) - HOUR_ROW_PX)
     node.scrollTop = target
-  }, [view, section, selectedDate, calendar.calendar.timezone, now])
+  }, [view, section, selectedDate, calendar.calendar.timezone, now, events, visibleHoursPref])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -265,6 +282,13 @@ export function App({
   const nowHour = now().getHours()
   const nowMinute = now().getMinutes()
   const showNowLine = view === 'day' && selectedDate === todayKey
+  const dayVisibleHours = useMemo(() => {
+    const forced = events.flatMap((event) =>
+      occupiedHours(event.startAt, event.endAt, event.timezone || calendar.calendar.timezone),
+    )
+    if (showNowLine) forced.push(nowHour)
+    return buildVisibleHours(visibleHoursPref, forced)
+  }, [events, calendar.calendar.timezone, visibleHoursPref, showNowLine, nowHour])
 
   const applyScope = async (scope: EditScope | DeleteScope) => {
     if (pendingScope === undefined) return
@@ -387,7 +411,7 @@ export function App({
                   <button type="button" className="btn btn-primary desktop-new-event" onClick={() => createAtHour(now().getHours())}>Создать событие</button>
                 </div>
               )}
-              {HOURS.map((hour) => {
+              {dayVisibleHours.map((hour) => {
                 const rowClass = [
                   'hour-row',
                   showNowLine && hour < nowHour ? 'is-past' : '',
@@ -407,17 +431,18 @@ export function App({
                   </div>
                 )
               })}
-              {showNowLine && (
+              {showNowLine && dayVisibleHours.includes(nowHour) && (
                 <div
                   className="now-line"
-                  style={{ top: `${nowHour * 64 + (nowMinute / 60) * 64}px` }}
+                  style={{ top: `${displayOffsetPx(dayVisibleHours, nowHour, nowMinute)}px` }}
                   aria-hidden="true"
                 />
               )}
-              <div className="events-layer">
+              <div className="events-layer" style={{ height: `${dayVisibleHours.length * HOUR_ROW_PX}px` }}>
                 {events.map((event) => (
                   <EventBlock
                     event={event}
+                    topPx={displayOffsetPx(dayVisibleHours, eventHour(event))}
                     allowDrag={allowDayDrag}
                     onDrag={() => setDragged(event)}
                     onResize={() => { setEditing(event); setDraft({ title: event.title, description: event.description, startAt: event.startAt, endAt: new Date(Date.parse(event.endAt) + 30 * 60_000).toISOString(), color: event.color }) }}
@@ -436,6 +461,7 @@ export function App({
               onSelectDate={setSelectedDate}
               onEditEvent={openEvent}
               now={now}
+              visibleHoursPref={visibleHoursPref}
             />
           )}
           {view === 'month' && (
@@ -474,6 +500,8 @@ export function App({
         <SettingsSection
           theme={theme}
           onTheme={setTheme}
+          visibleHours={visibleHoursPref}
+          onVisibleHours={(value) => setVisibleHoursPref(normalizeVisibleHoursPreference(value))}
           notificationsEnabled={notificationsEnabled}
           onNotifications={async (enabled) => {
             if (enabled && typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -514,6 +542,7 @@ export function App({
 
 function EventBlock({
   event,
+  topPx,
   allowDrag,
   onDrag,
   onResize,
@@ -521,13 +550,14 @@ function EventBlock({
   onDelete,
 }: {
   event: Event
+  topPx: number
   allowDrag: boolean
   onDrag: () => void
   onResize: () => void
   onEdit: () => void
   onDelete: () => void
 }) {
-  const duration = Math.max(56, (Date.parse(event.endAt) - Date.parse(event.startAt)) / 60_000 * 64 / 60)
+  const duration = Math.max(56, (Date.parse(event.endAt) - Date.parse(event.startAt)) / 60_000 * HOUR_ROW_PX / 60)
   return (
     <article
       draggable={allowDrag}
@@ -535,7 +565,7 @@ function EventBlock({
       className={`event-block${allowDrag ? '' : ' no-drag'}`}
       tabIndex={0}
       style={{
-        top: `${eventHour(event) * 64}px`,
+        top: `${topPx}px`,
         height: `${duration}px`,
         ['--event-bg' as string]: event.color,
       }}
@@ -1222,10 +1252,12 @@ function TrashSection({ services, onRestored, boardRevision = 0 }: { services: A
 }
 
 function SettingsSection({
-  theme, onTheme, notificationsEnabled, onNotifications, onExport, onImport, onLogout,
+  theme, onTheme, visibleHours, onVisibleHours, notificationsEnabled, onNotifications, onExport, onImport, onLogout,
 }: {
   theme: 'light' | 'dark'
   onTheme: (theme: 'light' | 'dark') => void
+  visibleHours: VisibleHoursPreference
+  onVisibleHours: (value: VisibleHoursPreference) => void
   notificationsEnabled: boolean
   onNotifications: (enabled: boolean) => void | Promise<void>
   onExport: () => Promise<void>
@@ -1267,6 +1299,51 @@ function SettingsSection({
             Тёмная
           </button>
         </div>
+      </div>
+
+      <div className="settings-block">
+        <p className="settings-label" id="visible-hours-label">Какие часы показывать</p>
+        <p className="hint">Ты сам задаёшь окно дня: остальное в «День» и «Неделя» не рисуется. Например 09:00–20:00 — без ночи и раннего утра.</p>
+        <div className="visible-hours-row" role="group" aria-labelledby="visible-hours-label">
+          <label>
+            Показывать с
+            <select
+              aria-label="Показывать часы с"
+              value={visibleHours.startHour}
+              onChange={(event) => onVisibleHours({
+                startHour: Number(event.target.value),
+                endHour: visibleHours.endHour,
+              })}
+            >
+              {HOUR_OPTIONS.map((hour) => (
+                <option key={`start-${hour}`} value={hour}>{String(hour).padStart(2, '0')}:00</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            до
+            <select
+              aria-label="Показывать часы до"
+              value={visibleHours.endHour}
+              onChange={(event) => onVisibleHours({
+                startHour: visibleHours.startHour,
+                endHour: Number(event.target.value),
+              })}
+            >
+              {HOUR_OPTIONS.map((hour) => (
+                <option key={`end-${hour}`} value={hour}>{String(hour).padStart(2, '0')}:00</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => onVisibleHours({ startHour: 0, endHour: 23 })}
+        >
+          Показать все 24 часа
+        </button>
+        <p className="hint">Если в скрытом часу уже есть событие (или сейчас этот час), строка всё равно появится, чтобы событие не пропало.</p>
       </div>
 
       <div className="settings-block">

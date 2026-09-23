@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added (CI auto-deploy · D20)
+
+- GitHub Actions workflow on push to `main`: build SPA and run `scripts/deploy_calendar.py` to Beget using secret `BEGET_SSH_PASSWORD`.
+- Decision D20 recorded in `docs/17_DECISIONS.md`.
+
+### Added (Visible hours preference · D19)
+
+- Settings: «Часы в расписании» — contiguous range from–to (default 0–23), stored in localStorage.
+- Day and week timelines hide hours outside the range; hours with events and today’s current hour stay visible; event/now tops remapped to the compressed list.
+- Decision D19 recorded in `docs/17_DECISIONS.md`.
+
 ### Added (Production deploy · D18)
 
 - Live at https://calendar.folio-one.ru (HTTPS, login gate).

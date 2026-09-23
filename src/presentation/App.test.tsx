@@ -152,3 +152,54 @@ describe('tasks section', () => {
     expect(await screen.findByText('Купить молоко')).toBeTruthy()
   })
 })
+
+describe('visible hours settings', () => {
+  it('hides hours outside the configured range on the day timeline', async () => {
+    const user = userEvent.setup()
+    const dayCalendar: DayCalendarService = {
+      calendar,
+      listEvents: async () => [],
+      listEventsInRange: async () => [],
+      createEvent: async (draft) => ({ ...draft, id: 'e1', calendarId: calendar.id, timezone: 'UTC', allDay: false, createdAt: draft.startAt, updatedAt: draft.startAt }),
+      updateEvent: async (_id, draft) => ({ ...draft, id: 'e1', calendarId: calendar.id, timezone: 'UTC', allDay: false, createdAt: draft.startAt, updatedAt: draft.startAt }),
+      deleteEvent: async () => undefined,
+      moveEvent: async (_id, startAt) => ({ id: 'e1', calendarId: calendar.id, title: '', description: '', startAt, endAt: startAt, timezone: 'UTC', allDay: false, color: '#000', createdAt: startAt, updatedAt: startAt }),
+      resizeEvent: async (_id, endAt) => ({ id: 'e1', calendarId: calendar.id, title: '', description: '', startAt: endAt, endAt, timezone: 'UTC', allDay: false, color: '#000', createdAt: endAt, updatedAt: endAt }),
+    }
+    const services = {
+      calendar: dayCalendar,
+      plans: { calendar, createPlan: async () => { throw new Error('unused') }, updatePlan: async () => { throw new Error('unused') }, deletePlan: async () => undefined, listPlansInRange: emptyList, addTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, toggleTask: async () => { throw new Error('unused') }, reorderTasks: async () => [], listTasks: emptyList, progress: async () => ({ completed: 0, total: 0, percentage: 0 }) },
+      tasks: { calendar, createTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, listUndatedTasks: emptyList, listTasksForDate: emptyList, moveTask: async () => { throw new Error('unused') }, toggleCompleted: async () => { throw new Error('unused') } },
+      lists: { calendar, listAll: async () => [], create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined, addItem: async () => { throw new Error('unused') }, updateItem: async () => { throw new Error('unused') }, deleteItem: async () => undefined, toggleItem: async () => { throw new Error('unused') }, reorderItems: async () => [] },
+      categories: { calendar, list: emptyList, create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined },
+      reminders: { listForEvent: emptyList, add: async () => { throw new Error('unused') }, remove: async () => undefined },
+      repositories: {
+        calendars: { get: async () => calendar, list: async () => [calendar], put: async () => undefined, getLocalCalendar: async () => calendar },
+        events: { get: async () => undefined, list: emptyList, put: async () => undefined, listByCalendarId: emptyList },
+        recurrenceRules: { get: async () => undefined, list: emptyList, put: async () => undefined },
+        eventExceptions: { get: async () => undefined, list: emptyList, put: async () => undefined },
+        plans: { get: async () => undefined, list: emptyList, put: async () => undefined, listByCalendarId: emptyList },
+        planTasks: { get: async () => undefined, list: emptyList, put: async () => undefined },
+        tasks: { get: async () => undefined, list: emptyList, put: async () => undefined, listByCalendarId: emptyList },
+        lists: { get: async () => undefined, list: emptyList, put: async () => undefined, listByCalendarId: emptyList },
+        listItems: { get: async () => undefined, list: emptyList, put: async () => undefined },
+        categories: { get: async () => undefined, list: emptyList, put: async () => undefined, listByCalendarId: emptyList },
+        reminders: { get: async () => undefined, list: emptyList, put: async () => undefined },
+      },
+    } as unknown as AppServices
+
+    render(<App services={services} now={() => new Date('2026-09-17T08:00:00.000Z')} />)
+
+    expect(screen.getByRole('button', { name: 'Создать событие в 0:00' })).toBeTruthy()
+
+    const nav = screen.getByRole('navigation', { name: 'Основная навигация' })
+    await user.click(within(nav).getByRole('button', { name: 'Настройки' }))
+    await user.selectOptions(screen.getByLabelText('Показывать часы с'), '3')
+    await user.click(within(nav).getByRole('button', { name: 'Календарь' }))
+
+    expect(screen.queryByRole('button', { name: 'Создать событие в 0:00' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Создать событие в 1:00' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Создать событие в 2:00' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Создать событие в 3:00' })).toBeTruthy()
+  })
+})

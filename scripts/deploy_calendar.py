@@ -85,9 +85,12 @@ def build_tarball() -> bytes:
         raise SystemExit("dist/ missing — run npm run build first")
     buf = io.BytesIO()
     skip_dirs = {".venv", "__pycache__", ".pytest_cache", "node_modules", ".git"}
+    skip_names = {".env", ".env.local"}
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         for path in BACKEND.rglob("*"):
             if any(part in skip_dirs for part in path.parts):
+                continue
+            if path.name in skip_names:
                 continue
             if path.is_file():
                 arc = Path("backend") / path.relative_to(BACKEND)
@@ -132,6 +135,10 @@ def ensure_mariadb(client: paramiko.SSHClient, db_password: str) -> None:
 
 
 def write_server_env(client: paramiko.SSHClient, db_password: str) -> None:
+    code, _, _ = run(client, f"test -f {APP_DIR}/backend/.env")
+    if code == 0:
+        print("Keeping existing server .env (AI/auth/DB unchanged)")
+        return
     local = read_local_backend_env()
     session_secret = local.get("AUTH_SESSION_SECRET") or secrets.token_urlsafe(32)
     auth_user = local.get("AUTH_USERNAME") or "петр"

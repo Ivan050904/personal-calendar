@@ -1,22 +1,29 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Event } from '../domain/models'
 import { addDays, mondayOf, weekSegments } from '../application/week-calendar'
-import type { DayCalendarService } from '../application/day-calendar'
+import { dateKey, type DayCalendarService } from '../application/day-calendar'
+import {
+  buildVisibleHours,
+  HOUR_ROW_PX,
+  occupiedHours,
+  type VisibleHoursPreference,
+} from '../application/visible-hours'
 import './week-calendar.css'
-
-const HOURS = Array.from({ length: 24 }, (_, value) => value)
 
 export function WeekCalendar({
   calendar,
   selectedDate,
   onSelectDate,
   onEditEvent,
+  now = () => new Date(),
+  visibleHoursPref,
 }: {
   calendar: DayCalendarService
   selectedDate: string
   onSelectDate: (date: string) => void
   onEditEvent: (event: Event) => void
   now?: () => Date
+  visibleHoursPref: VisibleHoursPreference
 }) {
   const weekStart = mondayOf(selectedDate)
   const [segments, setSegments] = useState<ReturnType<typeof weekSegments>>([])
@@ -31,6 +38,16 @@ export function WeekCalendar({
   }, [calendar, weekStart])
 
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index))
+  const todayKey = dateKey(now(), calendar.calendar.timezone)
+  const nowHour = now().getHours()
+  const weekEnd = addDays(weekStart, 6)
+  const visibleHours = useMemo(() => {
+    const forced = segments.flatMap((segment) =>
+      occupiedHours(segment.event.startAt, segment.event.endAt, segment.event.timezone || calendar.calendar.timezone),
+    )
+    if (todayKey >= weekStart && todayKey <= weekEnd) forced.push(nowHour)
+    return buildVisibleHours(visibleHoursPref, forced)
+  }, [segments, calendar.calendar.timezone, visibleHoursPref, weekStart, weekEnd, todayKey, nowHour])
 
   return (
     <section className="week-calendar" aria-label="Календарь недели">
@@ -46,13 +63,13 @@ export function WeekCalendar({
             {new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', timeZone: calendar.calendar.timezone }).format(new Date(`${day}T12:00:00Z`))}
           </button>
         ))}
-        {HOURS.map((hour) => (
+        {visibleHours.map((hour) => (
           <div className="week-row" key={hour}>
             <span>{String(hour).padStart(2, '0')}:00</span>
             {days.map((day) => (
               <div className="week-cell" key={day}>
                 {segments
-                  .filter((segment) => segment.date === day && Math.floor(segment.top / 64) === hour)
+                  .filter((segment) => segment.date === day && Math.floor(segment.top / HOUR_ROW_PX) === hour)
                   .map((segment) => (
                     <article
                       className="week-event"
@@ -60,7 +77,7 @@ export function WeekCalendar({
                       role="button"
                       tabIndex={0}
                       style={{
-                        top: `${segment.top % 64}px`,
+                        top: `${segment.top % HOUR_ROW_PX}px`,
                         height: `${segment.height}px`,
                         left: `${segment.column / segment.columns * 100}%`,
                         width: `${100 / segment.columns}%`,

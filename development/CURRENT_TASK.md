@@ -1,10 +1,9 @@
 # Current Task
 
-Production deploy (D18) complete.
+CI auto-deploy (D20) + visible hours (D19) shipping.
 
 Done:
-- https://calendar.folio-one.ru
-- Auth login + MariaDB + SSL
-- deploy script + D18
+- D19 visible hours in Settings
+- D20 GitHub Actions → Beget on push to main
 
 STOP.
