@@ -7,7 +7,7 @@ Calendar, Event, recurrence rules/exceptions, Plan, PlanTask, Task, List, ListIt
 
 Все изменения схемы — только через Alembic.
 
-Date-only Task.dueDate хранится как date semantic, без UTC-сдвига.
+Date-only Task.dueDate хранится как date semantic, без UTC-сдвига. Task.recurrenceRuleId (optional) ссылается на RecurrenceRule; для повторяющихся задач dueDate обязателен (ADR-015).
 
 Event/Plan сохраняют локально-задуманное время и timezone semantics.
 

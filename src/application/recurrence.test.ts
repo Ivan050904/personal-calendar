@@ -4,6 +4,7 @@ import {
   clampDayOfMonth,
   generateOccurrences,
   makeOccurrenceKey,
+  nextDueDateAfter,
   splitRuleAtOccurrence,
 } from './recurrence'
 
@@ -236,5 +237,12 @@ describe('recurrence generation', () => {
       '2026-03-31T09:00',
       '2026-04-30T09:00',
     ])
+  })
+
+  it('advances rolling task due dates (ADR-015)', () => {
+    expect(nextDueDateAfter('2026-01-31', rule({ frequency: 'monthly', dayOfMonth: 31 }))).toBe('2026-02-28')
+    expect(nextDueDateAfter('2026-09-15', rule({ frequency: 'daily', interval: 3 }))).toBe('2026-09-18')
+    expect(nextDueDateAfter('2026-09-15', rule({ frequency: 'weekly', weekdays: [2] }))).toBe('2026-09-22')
+    expect(nextDueDateAfter('2026-09-15', rule({ frequency: 'monthly', dayOfMonth: 15, untilDate: '2026-09-20' }))).toBeUndefined()
   })
 })

@@ -93,7 +93,8 @@ PlanTask не имеет собственного времени в MVP.
 
 Задача может быть:
 - без даты;
-- с датой, но без времени.
+- с датой, но без времени;
+- с датой и повторением (ежедневно / еженедельно / ежемесячно) — без времени на шкале.
 
 Поля:
 - id
@@ -101,10 +102,19 @@ PlanTask не имеет собственного времени в MVP.
 - title
 - description (optional)
 - dueDate (optional)
+- recurrenceRuleId (optional; requires dueDate)
 - completed
 - createdAt
 - updatedAt
 - deletedAt
+
+Повторение задачи переиспользует `RecurrenceRule` (те же frequency / interval / weekdays / dayOfMonth / untilDate / occurrenceCount, что у событий). Отдельной recurrence-системы для задач нет.
+
+Поведение завершения (ADR-015):
+- обычная задача — toggle `completed`;
+- повторяющаяся — при отметке «сделано» `dueDate` сдвигается на следующий экземпляр, `completed` остаётся false; если следующего нет — `completed=true` на последней дате.
+
+На экране Сегодня / в блоке «Сегодня» показываются задачи с `dueDate` = сегодня и незавершённые с `dueDate` раньше сегодня (просроченные).
 
 Задачу с датой можно перемещать на другую дату drag-and-drop.
 

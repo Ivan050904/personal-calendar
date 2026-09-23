@@ -268,6 +268,63 @@ export async function upsertModifiedException(
   return exception
 }
 
+/**
+ * Next due date after a completed rolling task occurrence (ADR-015).
+ * Returns undefined when the series has ended (untilDate / no further match).
+ */
+export function nextDueDateAfter(
+  dueDate: string,
+  rule: RecurrenceRule,
+  timezone = 'UTC',
+): string | undefined {
+  validateRecurrenceRule(rule)
+  const interval = Math.max(1, rule.interval)
+  let next: string | undefined
+
+  switch (rule.frequency) {
+    case 'daily':
+      next = addDaysIso(dueDate, interval)
+      break
+    case 'monthly': {
+      const dayOfMonth = rule.dayOfMonth ?? Number(dueDate.slice(8, 10))
+      const [year, month] = dueDate.split('-').map(Number)
+      let y = year!
+      let m = month! + interval
+      while (m > 12) {
+        m -= 12
+        y += 1
+      }
+      const day = clampDayOfMonth(y, m, dayOfMonth)
+      next = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      break
+    }
+    case 'weekly':
+    case 'weekdays': {
+      const weekdays = rule.weekdays.length > 0
+        ? rule.weekdays
+        : rule.frequency === 'weekdays'
+          ? ([1, 2, 3, 4, 5] as Weekday[])
+          : [weekdayOf(dueDate, timezone)]
+      let cursor = addDaysIso(dueDate, 1)
+      const maxScan = interval * 14 + 7
+      for (let i = 0; i < maxScan; i += 1) {
+        if (matchesWeekdays(cursor, timezone, weekdays) && weeksBetween(dueDate, cursor) % interval === 0) {
+          next = cursor
+          break
+        }
+        cursor = addDaysIso(cursor, 1)
+      }
+      break
+    }
+    default:
+      return undefined
+  }
+
+  if (next === undefined) return undefined
+  if (rule.untilDate !== undefined && next > rule.untilDate) return undefined
+  return next
+}
+
 export function splitRuleAtOccurrence(
   rule: RecurrenceRule,
   occurrenceDate: string,

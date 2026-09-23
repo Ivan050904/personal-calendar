@@ -278,6 +278,7 @@ class DomainExecutor:
                 "title": title,
                 "description": payload.get("description"),
                 "dueDate": payload.get("dueDate"),
+                "recurrenceRuleId": payload.get("recurrenceRuleId"),
                 "completed": False,
                 "createdAt": _iso(now),
                 "updatedAt": _iso(now),

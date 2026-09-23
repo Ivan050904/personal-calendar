@@ -58,6 +58,10 @@ Do not materialize an infinite series into the database. Generate occurrences fo
 
 Visible range queries must be bounded.
 
+## Task recurrence (ADR-015)
+
+Tasks reuse the same `RecurrenceRule` frequencies. They do not use EventException projections. Completing a recurring task advances `dueDate` to the next occurrence (rolling due date). Month-end clamping follows ADR-012.
+
 ## Timezone
 
 Occurrence generation must happen with timezone-aware date logic. DST transitions must not produce accidental one-hour shifts in the intended local time.

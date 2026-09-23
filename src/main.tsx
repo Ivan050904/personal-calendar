@@ -85,7 +85,7 @@ function AppBoot({ onLogout }: { onLogout?: () => void }) {
               repositories.eventExceptions,
             ),
             plans: new LocalPlansService(calendar, repositories.plans, repositories.planTasks),
-            tasks: new LocalTasksService(calendar, repositories.tasks),
+            tasks: new LocalTasksService(calendar, repositories.tasks, repositories.recurrenceRules),
             lists: new LocalListsService(calendar, repositories.lists, repositories.listItems),
             categories: new LocalCategoriesService(calendar, repositories.categories),
             reminders,
@@ -171,3 +171,9 @@ root.render(
     <Root />
   </StrictMode>,
 )
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch(() => undefined)
+  })
+}

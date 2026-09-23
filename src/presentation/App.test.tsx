@@ -35,7 +35,7 @@ describe('day calendar view', () => {
     const services = {
       calendar: dayCalendar,
       plans: { calendar, createPlan: async () => { throw new Error('unused') }, updatePlan: async () => { throw new Error('unused') }, deletePlan: async () => undefined, listPlansInRange: emptyList, addTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, toggleTask: async () => { throw new Error('unused') }, reorderTasks: async () => [], listTasks: emptyList, progress: async () => ({ completed: 0, total: 0, percentage: 0 }) },
-      tasks: { calendar, createTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, listUndatedTasks: emptyList, listTasksForDate: emptyList, moveTask: async () => { throw new Error('unused') }, toggleCompleted: async () => { throw new Error('unused') } },
+      tasks: { calendar, createTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, listUndatedTasks: emptyList, listTasksForDate: emptyList, listTasksDueOnOrOverdue: emptyList, moveTask: async () => { throw new Error('unused') }, toggleCompleted: async () => { throw new Error('unused') }, getRecurrenceRule: async () => undefined },
       lists: { calendar, listAll: async () => [], create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined, addItem: async () => { throw new Error('unused') }, updateItem: async () => { throw new Error('unused') }, deleteItem: async () => undefined, toggleItem: async () => { throw new Error('unused') }, reorderItems: async () => [] },
       categories: { calendar, list: emptyList, create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined },
       reminders: { listForEvent: emptyList, add: async () => { throw new Error('unused') }, remove: async () => undefined },
@@ -113,8 +113,10 @@ describe('tasks section', () => {
         deleteTask: async () => undefined,
         listUndatedTasks: async () => [...undated],
         listTasksForDate: emptyList,
+        listTasksDueOnOrOverdue: emptyList,
         moveTask: async () => { throw new Error('unused') },
         toggleCompleted: async () => { throw new Error('unused') },
+        getRecurrenceRule: async () => undefined,
       },
       lists: { calendar, listAll: async () => [], create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined, addItem: async () => { throw new Error('unused') }, updateItem: async () => { throw new Error('unused') }, deleteItem: async () => undefined, toggleItem: async () => { throw new Error('unused') }, reorderItems: async () => [] },
       categories: { calendar, list: emptyList, create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined },
@@ -169,7 +171,7 @@ describe('visible hours settings', () => {
     const services = {
       calendar: dayCalendar,
       plans: { calendar, createPlan: async () => { throw new Error('unused') }, updatePlan: async () => { throw new Error('unused') }, deletePlan: async () => undefined, listPlansInRange: emptyList, addTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, toggleTask: async () => { throw new Error('unused') }, reorderTasks: async () => [], listTasks: emptyList, progress: async () => ({ completed: 0, total: 0, percentage: 0 }) },
-      tasks: { calendar, createTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, listUndatedTasks: emptyList, listTasksForDate: emptyList, moveTask: async () => { throw new Error('unused') }, toggleCompleted: async () => { throw new Error('unused') } },
+      tasks: { calendar, createTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, listUndatedTasks: emptyList, listTasksForDate: emptyList, listTasksDueOnOrOverdue: emptyList, moveTask: async () => { throw new Error('unused') }, toggleCompleted: async () => { throw new Error('unused') }, getRecurrenceRule: async () => undefined },
       lists: { calendar, listAll: async () => [], create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined, addItem: async () => { throw new Error('unused') }, updateItem: async () => { throw new Error('unused') }, deleteItem: async () => undefined, toggleItem: async () => { throw new Error('unused') }, reorderItems: async () => [] },
       categories: { calendar, list: emptyList, create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined },
       reminders: { listForEvent: emptyList, add: async () => { throw new Error('unused') }, remove: async () => undefined },
@@ -220,7 +222,7 @@ describe('week calendar create', () => {
     const services = {
       calendar: dayCalendar,
       plans: { calendar, createPlan: async () => { throw new Error('unused') }, updatePlan: async () => { throw new Error('unused') }, deletePlan: async () => undefined, listPlansInRange: emptyList, addTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, toggleTask: async () => { throw new Error('unused') }, reorderTasks: async () => [], listTasks: emptyList, progress: async () => ({ completed: 0, total: 0, percentage: 0 }) },
-      tasks: { calendar, createTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, listUndatedTasks: emptyList, listTasksForDate: emptyList, moveTask: async () => { throw new Error('unused') }, toggleCompleted: async () => { throw new Error('unused') } },
+      tasks: { calendar, createTask: async () => { throw new Error('unused') }, updateTask: async () => { throw new Error('unused') }, deleteTask: async () => undefined, listUndatedTasks: emptyList, listTasksForDate: emptyList, listTasksDueOnOrOverdue: emptyList, moveTask: async () => { throw new Error('unused') }, toggleCompleted: async () => { throw new Error('unused') }, getRecurrenceRule: async () => undefined },
       lists: { calendar, listAll: async () => [], create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined, addItem: async () => { throw new Error('unused') }, updateItem: async () => { throw new Error('unused') }, deleteItem: async () => undefined, toggleItem: async () => { throw new Error('unused') }, reorderItems: async () => [] },
       categories: { calendar, list: emptyList, create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined },
       reminders: { listForEvent: emptyList, add: async () => { throw new Error('unused') }, remove: async () => undefined },

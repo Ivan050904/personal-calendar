@@ -184,6 +184,34 @@ select:focus-visible {
   border-radius: 12px;
 }
 
+.all-day-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px 10px 80px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.all-day-chip {
+  border: 1px solid color-mix(in srgb, var(--event-bg, var(--accent)) 45%, var(--border));
+  border-left: 3px solid var(--event-bg, var(--accent));
+  background: color-mix(in srgb, var(--event-bg, var(--accent)) 18%, var(--surface));
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.all-day-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .day-timeline.is-empty .hour-row {
   opacity: 0.42;
 }

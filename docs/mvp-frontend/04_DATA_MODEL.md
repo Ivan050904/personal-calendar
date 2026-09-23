@@ -103,12 +103,15 @@ Do not invent complex RRULE syntax unless required. Internal representation may 
 - title
 - description?
 - dueDate?
+- recurrenceRuleId?
 - completed
 - createdAt
 - updatedAt
 - deletedAt?
 
 No time in MVP.
+
+Invariant: if `recurrenceRuleId` is set, `dueDate` is required. Recurrence rules are shared with events (`RecurrenceRule`); task completion uses rolling due-date semantics (ADR-015), not EventException materialization.
 
 ## TaskList
 

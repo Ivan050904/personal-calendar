@@ -49,3 +49,9 @@ D23 — Production Whisper is remote via Folio AI proxy Groq path (http://91.186
 D24 — Plans become first-class in day dock: create plan, expand checklist, toggle/add items; plans also render on the day timeline. Browser reminders poll due offsets while the tab is open and notifications are enabled.
 
 D25 — Production AI chat uses Folio AI proxy Groq path (http://91.186.214.4:8787/groq/v1, model openai/gpt-oss-20b) because NVIDIA DeepSeek reasoning models exceed the API timeout from Beget (~50s). Whisper already uses the same proxy Groq path (D23).
+
+D26 — Recurring tasks (ADR-015): Task may reference RecurrenceRule; create form offers daily/weekly/monthly when a due date is set; complete advances due date; Today / «Сегодня» also lists incomplete overdue dated tasks. Timed repeats remain Events.
+
+D27 — All-day events: EventForm toggle «Весь день» stores allDay=true with local-day 00:00–23:59 bounds; day/week show a dedicated all-day strip; Smart Day ignores all-day (unchanged). AI phrases «весь день» / «на весь день» set allDay via enrich.
+
+D28 — Reminder PWA MVP: register /sw.js + web manifest; due reminders prefer ServiceWorkerRegistration.showNotification while the app poll runs. Background delivery is best-effort (desktop Chrome/PWA); not Google-parity on iOS Safari.

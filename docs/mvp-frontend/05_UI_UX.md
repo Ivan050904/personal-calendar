@@ -88,7 +88,10 @@ Plan form:
 Task form:
 - title
 - optional date
+- optional recurrence (never / daily / weekly / monthly) when a date is set; recurrence requires a due date
 - save
+
+Recurring tasks show a short repeat label on the row (e.g. «каждый месяц»).
 
 List form:
 - list title

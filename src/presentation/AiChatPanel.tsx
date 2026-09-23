@@ -212,13 +212,37 @@ function formatRecurrence(payload: Record<string, unknown>): string {
   return days ? `Повтор: ${base} · ${days}` : `Повтор: ${base}`
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  start: 'начало',
+  end: 'конец',
+  startDate: 'начало',
+  endDate: 'конец',
+  date: 'дата',
+  title: 'название',
+  entityType: 'тип',
+  time: 'время',
+  priority: 'приоритет',
+}
+
+function humanizeMissingFields(fields: string[] | undefined): string {
+  if (!fields?.length) return 'поля'
+  return fields.map((field) => FIELD_LABELS[field] ?? field).join(', ')
+}
+
 function draftSummary(draft: AiDraftCard): string {
   const title = String(draft.payload.title ?? 'Без названия')
   const op = OPERATION_LABELS[draft.operation] ?? draft.operation
   const type = draft.entityType ?? 'объект'
   if (draft.clarification) return draft.clarification
   if (draft.missingFields?.length) {
-    return `Нужно уточнить поля. Можно поправить форму ниже или ответить в чате.`
+    const onlyTime =
+      draft.missingFields.every((field) =>
+        ['start', 'end', 'startDate', 'endDate', 'time'].includes(field),
+      ) && !draft.missingFields.includes('date')
+    if (onlyTime) {
+      return 'Уточните время начала (например: в 20:00 или на 20.00). Можно поправить форму ниже.'
+    }
+    return `Нужно уточнить: ${humanizeMissingFields(draft.missingFields)}. Можно поправить форму ниже или ответить в чате.`
   }
   return `Проверьте черновик: ${op.toLowerCase()} ${type} «${title}».`
 }
@@ -843,7 +867,9 @@ export function AiChatPanel({
                     </>
                   )}
                   {!!message.draft.missingFields?.length && !message.editing && (
-                    <p className="chat-draft-hint">Не хватает: {message.draft.missingFields.join(', ')}</p>
+                    <p className="chat-draft-hint">
+                      Не хватает: {humanizeMissingFields(message.draft.missingFields)}
+                    </p>
                   )}
 
                   {message.editing ? (

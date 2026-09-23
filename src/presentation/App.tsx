@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Event, Plan, Weekday } from '../domain/models'
 import {
+  allDayBounds,
   dateKey,
   eventHour,
   hourInTimezone,
@@ -13,6 +14,7 @@ import {
   type EventDraft,
   type RecurrenceDraft,
 } from '../application/day-calendar'
+import { weekdayOf } from '../application/recurrence'
 import type { PlansService } from '../application/plans'
 import type { TasksService } from '../application/tasks'
 import type { LocalListsService } from '../application/lists'
@@ -58,6 +60,56 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
 
 type Section = 'calendar' | 'tasks' | 'lists' | 'assistant' | 'trash' | 'settings'
 type CalendarView = 'now' | 'day' | 'week' | 'month'
+
+type NavIconId = Section
+
+const NAV_ICON_PATHS: Record<NavIconId, ReactNode> = {
+  calendar: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3" />
+    </>
+  ),
+  tasks: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M8 12l2.5 2.5L16 9" />
+    </>
+  ),
+  lists: (
+    <>
+      <path d="M8 7h12M8 12h12M8 17h12" />
+      <path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01" strokeLinecap="round" />
+    </>
+  ),
+  assistant: (
+    <>
+      <path d="M5 18.5V8.2A2.2 2.2 0 0 1 7.2 6h9.6A2.2 2.2 0 0 1 19 8.2v6.1A2.2 2.2 0 0 1 16.8 16.5H9.2L5 18.5Z" />
+      <path d="M9 10.5h6M9 13h4" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M5 8h14M9.5 8V6.5A1.5 1.5 0 0 1 11 5h2a1.5 1.5 0 0 1 1.5 1.5V8M7.5 8l.8 11a1.5 1.5 0 0 0 1.5 1.4h4.4a1.5 1.5 0 0 0 1.5-1.4l.8-11" />
+    </>
+  ),
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3.5v2.2M12 18.3v2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6" />
+    </>
+  ),
+}
+
+function NavIcon({ id }: { id: NavIconId }) {
+  return (
+    <span className="app-nav-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+        {NAV_ICON_PATHS[id]}
+      </svg>
+    </span>
+  )
+}
 
 const PRIMARY_NAV: { id: Section; label: string }[] = [
   { id: 'calendar', label: 'Календарь' },
@@ -140,6 +192,8 @@ export function App({
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [status, setStatus] = useState<string | undefined>()
   const [boardRevision, setBoardRevision] = useState(0)
+  const [focusPlanId, setFocusPlanId] = useState<string | undefined>()
+  const [dockOpen, setDockOpen] = useState(false)
   const touchStartX = useRef<number | undefined>(undefined)
   const touchStartY = useRef<number | undefined>(undefined)
   const dayTimelineRef = useRef<HTMLElement | null>(null)
@@ -192,9 +246,14 @@ export function App({
         fired.add(reminder.id)
         const event = byEvent.get(reminder.eventId)
         try {
-          new Notification(event?.title ?? 'Напоминание', {
-            body: `Скоро: ${event?.title ?? 'событие'}`,
-          })
+          const title = event?.title ?? 'Напоминание'
+          const body = `Скоро: ${event?.title ?? 'событие'}`
+          const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : undefined
+          if (reg?.showNotification) {
+            await reg.showNotification(title, { body, tag: reminder.id })
+          } else {
+            new Notification(title, { body })
+          }
         } catch { /* ignore */ }
       }
     }
@@ -331,8 +390,9 @@ export function App({
   const nowMinute = minuteInTimezone(now(), calendar.calendar.timezone)
   const showNowLine = view === 'day' && selectedDate === todayKey
   const dayVisibleHours = useMemo(() => {
+    const timed = events.filter((event) => !event.allDay)
     const forced = [
-      ...events.flatMap((event) =>
+      ...timed.flatMap((event) =>
         occupiedHours(event.startAt, event.endAt, event.timezone || calendar.calendar.timezone),
       ),
       ...dayPlans.flatMap((plan) =>
@@ -342,6 +402,9 @@ export function App({
     if (showNowLine) forced.push(nowHour)
     return buildVisibleHours(visibleHoursPref, forced)
   }, [events, dayPlans, calendar.calendar.timezone, visibleHoursPref, showNowLine, nowHour])
+
+  const allDayEvents = useMemo(() => events.filter((event) => event.allDay), [events])
+  const timedEvents = useMemo(() => events.filter((event) => !event.allDay), [events])
 
   const applyScope = async (scope: EditScope | DeleteScope) => {
     if (pendingScope === undefined) return
@@ -365,7 +428,15 @@ export function App({
 
   const openEvent = (event: Event) => {
     setEditing(event)
-    setDraft({ title: event.title, description: event.description, startAt: event.startAt, endAt: event.endAt, color: event.color })
+    setDraft({
+      title: event.title,
+      description: event.description,
+      startAt: event.startAt,
+      endAt: event.endAt,
+      color: event.color,
+      allDay: event.allDay,
+      categoryId: event.categoryId,
+    })
   }
 
   return (
@@ -374,7 +445,10 @@ export function App({
         <p className="app-sidebar-brand">Calendar</p>
         <nav className="app-nav" aria-label="Основная навигация" id="app-primary-nav">
           {PRIMARY_NAV.map(({ id, label }) => (
-            <button type="button" key={id} aria-current={section === id ? 'page' : undefined} onClick={() => setSection(id)}>{label}</button>
+            <button type="button" key={id} aria-current={section === id ? 'page' : undefined} onClick={() => setSection(id)}>
+              <NavIcon id={id} />
+              <span className="app-nav-label">{label}</span>
+            </button>
           ))}
         </nav>
         <button
@@ -385,7 +459,11 @@ export function App({
           aria-label={sidebarOpen ? 'Свернуть меню' : 'Открыть меню'}
           onClick={() => setSidebarOpen((open) => !open)}
         >
-          <span aria-hidden="true">{sidebarOpen ? '‹' : '›'}</span>
+          <span className="app-sidebar-toggle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+              {sidebarOpen ? <path d="M14.5 6.5 9 12l5.5 5.5" /> : <path d="M9.5 6.5 15 12l-5.5 5.5" />}
+            </svg>
+          </span>
         </button>
       </aside>
 
@@ -472,10 +550,25 @@ export function App({
                 setSelectedDate((date) => addDays(date, dx < 0 ? 1 : -1))
               }}
             >
-              {events.length === 0 && (
+              {(timedEvents.length === 0 && allDayEvents.length === 0 && dayPlans.length === 0) && (
                 <div className="day-empty" role="status">
                   <p className="empty-state">На этот день событий нет</p>
                   <button type="button" className="btn btn-primary desktop-new-event" onClick={createAtNow}>Создать событие</button>
+                </div>
+              )}
+              {allDayEvents.length > 0 && (
+                <div className="all-day-strip" aria-label="События на весь день">
+                  {allDayEvents.map((event) => (
+                    <button
+                      type="button"
+                      key={event.id}
+                      className="all-day-chip"
+                      style={{ ['--event-bg' as string]: event.color }}
+                      onClick={() => openEvent(event)}
+                    >
+                      {event.title}
+                    </button>
+                  ))}
                 </div>
               )}
               {dayVisibleHours.map((hour) => {
@@ -522,13 +615,13 @@ export function App({
                     </article>
                   )
                 })}
-                {events.map((event) => (
+                {timedEvents.map((event) => (
                   <EventBlock
                     event={event}
                     topPx={displayOffsetPx(dayVisibleHours, eventHour(event))}
-                    allowDrag={allowDayDrag}
+                    allowDrag={allowDayDrag && !event.allDay}
                     onDrag={() => setDragged(event)}
-                    onResize={() => { setEditing(event); setDraft({ title: event.title, description: event.description, startAt: event.startAt, endAt: new Date(Date.parse(event.endAt) + 30 * 60_000).toISOString(), color: event.color }) }}
+                    onResize={() => { setEditing(event); setDraft({ title: event.title, description: event.description, startAt: event.startAt, endAt: new Date(Date.parse(event.endAt) + 30 * 60_000).toISOString(), color: event.color, allDay: event.allDay, categoryId: event.categoryId }) }}
                     onEdit={() => openEvent(event)}
                     onDelete={() => void remove(event.id)}
                     key={event.id}
@@ -540,10 +633,26 @@ export function App({
           {view === 'week' && (
             <WeekCalendar
               calendar={calendar}
+              plans={services.plans}
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
               onEditEvent={openEvent}
+              onOpenPlan={(planId) => {
+                setFocusPlanId(planId)
+                setDockOpen(true)
+              }}
               onCreateAt={createAt}
+              onMoveEvent={(eventId, date, hour) => {
+                const startAt = zonedInputToIso(
+                  `${date}T${String(hour).padStart(2, '0')}:00`,
+                  calendar.calendar.timezone,
+                )
+                if (eventId.includes('::')) {
+                  void calendar.moveEvent(eventId, startAt).then(() => refresh())
+                  return
+                }
+                void calendar.moveEvent(eventId, startAt).then(() => refresh())
+              }}
               now={now}
               visibleHoursPref={visibleHoursPref}
               boardRevision={boardRevision}
@@ -559,10 +668,17 @@ export function App({
               boardRevision={boardRevision}
             />
           )}          {view !== 'now' && (
-            <details className="calendar-dock">
+            <details className="calendar-dock" open={dockOpen || undefined} onToggle={(event) => setDockOpen((event.target as HTMLDetailsElement).open)}>
               <summary>Планы и задачи на день</summary>
               <div className="dock-body">
-                <PlansPanel services={services} selectedDate={selectedDate} boardRevision={boardRevision} onChanged={() => void refresh()} />
+                <PlansPanel
+                  services={services}
+                  selectedDate={selectedDate}
+                  boardRevision={boardRevision}
+                  focusPlanId={focusPlanId}
+                  onFocusConsumed={() => setFocusPlanId(undefined)}
+                  onChanged={() => void refresh()}
+                />
                 <TodayTasksPanel services={services} selectedDate={selectedDate} boardRevision={boardRevision} />
               </div>
             </details>
@@ -583,6 +699,7 @@ export function App({
       {section === 'trash' && <TrashSection services={services} boardRevision={boardRevision} onRestored={() => void refresh()} />}
       {section === 'settings' && (
         <SettingsSection
+          services={services}
           theme={theme}
           onTheme={setTheme}
           visibleHours={visibleHoursPref}
@@ -593,7 +710,7 @@ export function App({
               await Notification.requestPermission()
             }
             setNotificationsEnabled(enabled && (typeof Notification === 'undefined' || Notification.permission === 'granted'))
-            setStatus(enabled ? 'Уведомления зависят от разрешения браузера и жизненного цикла вкладки' : undefined)
+            setStatus(enabled ? 'Напоминания: вкладка открыта (~30с) или PWA через service worker' : undefined)
           }}
           onExport={async () => {
             const backup = await exportBackup(services.repositories, now().toISOString())
@@ -622,6 +739,7 @@ export function App({
           draft={draft}
           timezone={calendar.calendar.timezone}
           reminders={services.reminders}
+          categories={services.categories}
           editingId={editing?.id}
           onCancel={() => { setDraft(undefined); setEditing(undefined) }}
           onSubmit={async (nextDraft, offsets) => submit(nextDraft, offsets)}
@@ -699,10 +817,11 @@ function ScopeDialog({ kind, onCancel, onChoose }: { kind: 'edit' | 'delete'; on
   )
 }
 
-function EventForm({ draft, timezone, reminders, editingId, onCancel, onSubmit }: {
+function EventForm({ draft, timezone, reminders, categories, editingId, onCancel, onSubmit }: {
   draft: EventDraft
   timezone: string
   reminders: LocalRemindersService
+  categories: LocalCategoriesService
   editingId?: string
   onCancel: () => void
   onSubmit: (draft: EventDraft, reminderOffsets: number[]) => Promise<void>
@@ -710,6 +829,8 @@ function EventForm({ draft, timezone, reminders, editingId, onCancel, onSubmit }
   type RepeatMode = 'never' | 'daily' | 'every_n_days' | RecurrenceDraft['frequency']
   const initialInterval = Math.max(1, draft.recurrence?.interval ?? 1)
   const [value, setValue] = useState(draft)
+  const [allDay, setAllDay] = useState(Boolean(draft.allDay))
+  const [categoryList, setCategoryList] = useState<Awaited<ReturnType<LocalCategoriesService['list']>>>([])
   const [repeat, setRepeat] = useState<RepeatMode>(() => {
     if (draft.recurrence === undefined) return 'never'
     if (draft.recurrence.frequency === 'daily' && initialInterval > 1) return 'every_n_days'
@@ -723,6 +844,10 @@ function EventForm({ draft, timezone, reminders, editingId, onCancel, onSubmit }
   const [untilDate, setUntilDate] = useState(draft.recurrence?.untilDate ?? '')
   const [occurrenceCount, setOccurrenceCount] = useState(String(draft.recurrence?.occurrenceCount ?? 10))
   const [selectedReminders, setSelectedReminders] = useState<number[]>([])
+
+  useEffect(() => {
+    void categories.list().then(setCategoryList)
+  }, [categories])
 
   useEffect(() => {
     const seriesId = editingId?.includes('::') ? editingId.split('::')[0] : editingId
@@ -752,24 +877,71 @@ function EventForm({ draft, timezone, reminders, editingId, onCancel, onSubmit }
           untilDate: endMode === 'until' && untilDate !== '' ? untilDate : undefined,
           occurrenceCount: endMode === 'count' ? Number(occurrenceCount) : undefined,
         }
-    await onSubmit({ ...value, recurrence }, selectedReminders)
+    await onSubmit({ ...value, allDay, recurrence }, selectedReminders)
   }
+
+  const dayValue = isoToZonedInput(value.startAt, timezone).slice(0, 10)
 
   return (
     <div className="event-form-backdrop" role="presentation" onClick={onCancel}>
       <form className="event-form-card" onClick={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submit() }}>
         <h2>Событие</h2>
         <label>Название<input required value={value.title} onChange={(event) => setValue({ ...value, title: event.target.value })} /></label>
-        <label>Начало<input required type="datetime-local" value={isoToZonedInput(value.startAt, timezone)} onChange={(event) => {
-          const nextStart = zonedInputToIso(event.target.value, timezone)
-          const durationMs = Math.max(60_000, Date.parse(value.endAt) - Date.parse(value.startAt))
-          setValue({
-            ...value,
-            startAt: nextStart,
-            endAt: new Date(Date.parse(nextStart) + durationMs).toISOString(),
-          })
-        }} /></label>
-        <label>Окончание<input required type="datetime-local" value={isoToZonedInput(value.endAt, timezone)} onChange={(event) => setValue({ ...value, endAt: zonedInputToIso(event.target.value, timezone) })} /></label>
+        <label>
+          Категория
+          <select
+            aria-label="Категория события"
+            value={value.categoryId ?? ''}
+            onChange={(event) => setValue({ ...value, categoryId: event.target.value || undefined })}
+          >
+            <option value="">Без категории</option>
+            {categoryList.map((category) => (
+              <option key={category.id} value={category.id}>{category.name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={allDay}
+            onChange={(event) => {
+              const next = event.target.checked
+              setAllDay(next)
+              if (next) {
+                const bounds = allDayBounds(dayValue, timezone)
+                setValue({ ...value, ...bounds })
+              }
+            }}
+          />
+          Весь день
+        </label>
+        {allDay ? (
+          <label>
+            Дата
+            <input
+              required
+              type="date"
+              value={dayValue}
+              onChange={(event) => {
+                const bounds = allDayBounds(event.target.value, timezone)
+                setValue({ ...value, ...bounds })
+              }}
+            />
+          </label>
+        ) : (
+          <>
+            <label>Начало<input required type="datetime-local" value={isoToZonedInput(value.startAt, timezone)} onChange={(event) => {
+              const nextStart = zonedInputToIso(event.target.value, timezone)
+              const durationMs = Math.max(60_000, Date.parse(value.endAt) - Date.parse(value.startAt))
+              setValue({
+                ...value,
+                startAt: nextStart,
+                endAt: new Date(Date.parse(nextStart) + durationMs).toISOString(),
+              })
+            }} /></label>
+            <label>Окончание<input required type="datetime-local" value={isoToZonedInput(value.endAt, timezone)} onChange={(event) => setValue({ ...value, endAt: zonedInputToIso(event.target.value, timezone) })} /></label>
+          </>
+        )}
 
         <details className="form-disclosure" open={repeat !== 'never'}>
           <summary>Повтор</summary>
@@ -908,12 +1080,14 @@ function TaskRow({
   title,
   completed,
   dueLabel,
+  repeatLabel,
   onToggle,
   onDelete,
 }: {
   title: string
   completed: boolean
   dueLabel?: string
+  repeatLabel?: string
   onToggle: () => void
   onDelete?: () => void
 }) {
@@ -923,6 +1097,7 @@ function TaskRow({
         <input type="checkbox" checked={completed} onChange={onToggle} />
         <span className="task-row-title">{title}</span>
       </label>
+      {repeatLabel !== undefined && <span className="task-row-repeat">{repeatLabel}</span>}
       {dueLabel !== undefined && <span className="task-row-due">{dueLabel}</span>}
       {onDelete !== undefined && (
         <button type="button" className="btn btn-ghost task-row-delete" onClick={onDelete}>
@@ -938,6 +1113,7 @@ function TaskBucket({
   empty,
   tasks,
   dueLabel,
+  repeatLabels,
   onToggle,
   onDelete,
 }: {
@@ -945,6 +1121,7 @@ function TaskBucket({
   empty: string
   tasks: Awaited<ReturnType<TasksService['listUndatedTasks']>>
   dueLabel?: string
+  repeatLabels?: Record<string, string>
   onToggle: (id: string) => void
   onDelete?: (id: string) => void
 }) {
@@ -964,6 +1141,7 @@ function TaskBucket({
               title={task.title}
               completed={task.completed}
               dueLabel={dueLabel}
+              repeatLabel={repeatLabels?.[task.id]}
               onToggle={() => onToggle(task.id)}
               onDelete={onDelete === undefined ? undefined : () => onDelete(task.id)}
             />
@@ -974,9 +1152,38 @@ function TaskBucket({
   )
 }
 
+const TASK_REPEAT_LABELS: Record<string, string> = {
+  daily: 'каждый день',
+  weekly: 'каждую неделю',
+  weekdays: 'по будням',
+  monthly: 'каждый месяц',
+}
+
 function TodayTasksPanel({ services, selectedDate, boardRevision = 0 }: { services: AppServices; selectedDate: string; boardRevision?: number }) {
+  const timezone = services.calendar.calendar.timezone
+  const today = dateKey(new Date(), timezone)
   const [tasks, setTasks] = useState<Awaited<ReturnType<TasksService['listTasksForDate']>>>([])
-  useEffect(() => { void services.tasks.listTasksForDate(selectedDate).then(setTasks) }, [services.tasks, selectedDate, boardRevision])
+  const [repeatLabels, setRepeatLabels] = useState<Record<string, string>>({})
+  const listForDay = selectedDate === today
+    ? (date: string) => services.tasks.listTasksDueOnOrOverdue(date)
+    : (date: string) => services.tasks.listTasksForDate(date)
+
+  useEffect(() => {
+    let cancelled = false
+    void listForDay(selectedDate).then(async (next) => {
+      if (cancelled) return
+      setTasks(next)
+      const labels: Record<string, string> = {}
+      await Promise.all(next.map(async (task) => {
+        if (task.recurrenceRuleId === undefined) return
+        const rule = await services.tasks.getRecurrenceRule(task.recurrenceRuleId)
+        if (rule !== undefined) labels[task.id] = TASK_REPEAT_LABELS[rule.frequency] ?? 'повтор'
+      }))
+      if (!cancelled) setRepeatLabels(labels)
+    })
+    return () => { cancelled = true }
+  }, [services.tasks, selectedDate, boardRevision, today])
+
   return (
     <section className="side-panel tasks-panel is-dock" aria-label="Задачи на день">
       <h2>Задачи на день</h2>
@@ -989,8 +1196,10 @@ function TodayTasksPanel({ services, selectedDate, boardRevision = 0 }: { servic
               key={task.id}
               title={task.title}
               completed={task.completed}
+              dueLabel={task.dueDate !== undefined && task.dueDate < selectedDate ? 'Просрочено' : undefined}
+              repeatLabel={repeatLabels[task.id]}
               onToggle={() => {
-                void services.tasks.toggleCompleted(task.id).then(() => services.tasks.listTasksForDate(selectedDate).then(setTasks))
+                void services.tasks.toggleCompleted(task.id).then(() => listForDay(selectedDate).then(setTasks))
               }}
             />
           ))}
@@ -1004,11 +1213,15 @@ function PlansPanel({
   services,
   selectedDate,
   boardRevision = 0,
+  focusPlanId,
+  onFocusConsumed,
   onChanged,
 }: {
   services: AppServices
   selectedDate: string
   boardRevision?: number
+  focusPlanId?: string
+  onFocusConsumed?: () => void
   onChanged?: () => void
 }) {
   const timezone = services.calendar.calendar.timezone
@@ -1034,6 +1247,12 @@ function PlansPanel({
   }
 
   useEffect(() => { void reload() }, [services.plans, selectedDate, boardRevision])
+
+  useEffect(() => {
+    if (!focusPlanId) return
+    setExpanded(focusPlanId)
+    onFocusConsumed?.()
+  }, [focusPlanId, onFocusConsumed])
 
   const createPlan = async () => {
     if (title.trim() === '') return
@@ -1069,8 +1288,8 @@ function PlansPanel({
           {expanded === plan.id && (
             <div className="plan-checklist">
               <ul>
-                {(tasksByPlan[plan.id] ?? []).map((task) => (
-                  <li key={task.id}>
+                {(tasksByPlan[plan.id] ?? []).map((task, index, all) => (
+                  <li key={task.id} className="plan-checklist-row">
                     <label>
                       <input
                         type="checkbox"
@@ -1084,6 +1303,53 @@ function PlansPanel({
                       />
                       {task.title}
                     </label>
+                    <div className="reorder-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        aria-label="Выше"
+                        disabled={index === 0}
+                        onClick={() => {
+                          const ids = all.map((entry) => entry.id)
+                          ;[ids[index - 1], ids[index]] = [ids[index]!, ids[index - 1]!]
+                          void services.plans.reorderTasks(plan.id, ids).then(async () => {
+                            await reload()
+                            onChanged?.()
+                          })
+                        }}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        aria-label="Ниже"
+                        disabled={index === all.length - 1}
+                        onClick={() => {
+                          const ids = all.map((entry) => entry.id)
+                          ;[ids[index], ids[index + 1]] = [ids[index + 1]!, ids[index]!]
+                          void services.plans.reorderTasks(plan.id, ids).then(async () => {
+                            await reload()
+                            onChanged?.()
+                          })
+                        }}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        aria-label="Удалить пункт"
+                        onClick={() => {
+                          void services.plans.deleteTask(task.id).then(async () => {
+                            await reload()
+                            onChanged?.()
+                          })
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -1217,32 +1483,50 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
   const nextWeek = addDays(today, 7)
   const [title, setTitle] = useState('')
   const [dueDate, setDueDate] = useState('')
+  const [repeat, setRepeat] = useState<'never' | 'daily' | 'weekly' | 'monthly'>('never')
   const [undated, setUndated] = useState<Awaited<ReturnType<TasksService['listUndatedTasks']>>>([])
-  const [todayTasks, setTodayTasks] = useState<Awaited<ReturnType<TasksService['listTasksForDate']>>>([])
+  const [todayTasks, setTodayTasks] = useState<Awaited<ReturnType<TasksService['listTasksDueOnOrOverdue']>>>([])
   const [focusTasks, setFocusTasks] = useState<Awaited<ReturnType<TasksService['listTasksForDate']>>>([])
+  const [repeatLabels, setRepeatLabels] = useState<Record<string, string>>({})
   const showFocusSection = dueDate !== '' && dueDate !== today
 
-  const refresh = () => {
-    void services.tasks.listUndatedTasks().then(setUndated)
-    void services.tasks.listTasksForDate(today).then(setTodayTasks)
-    if (showFocusSection) {
-      void services.tasks.listTasksForDate(dueDate).then(setFocusTasks)
-    } else {
-      setFocusTasks([])
+  const loadRepeatLabels = async (tasks: Awaited<ReturnType<TasksService['listUndatedTasks']>>[]) => {
+    const labels: Record<string, string> = {}
+    for (const group of tasks) {
+      for (const task of group) {
+        if (task.recurrenceRuleId === undefined) continue
+        const rule = await services.tasks.getRecurrenceRule(task.recurrenceRuleId)
+        if (rule !== undefined) labels[task.id] = TASK_REPEAT_LABELS[rule.frequency] ?? 'повтор'
+      }
     }
+    setRepeatLabels(labels)
+  }
+
+  const refresh = () => {
+    void Promise.all([
+      services.tasks.listUndatedTasks(),
+      services.tasks.listTasksDueOnOrOverdue(today),
+      showFocusSection ? services.tasks.listTasksForDate(dueDate) : Promise.resolve([]),
+    ]).then(([nextUndated, nextToday, nextFocus]) => {
+      setUndated(nextUndated)
+      setTodayTasks(nextToday)
+      setFocusTasks(nextFocus)
+      void loadRepeatLabels([nextUndated, nextToday, nextFocus])
+    })
   }
 
   useEffect(() => {
     let cancelled = false
     void Promise.all([
       services.tasks.listUndatedTasks(),
-      services.tasks.listTasksForDate(today),
+      services.tasks.listTasksDueOnOrOverdue(today),
       showFocusSection ? services.tasks.listTasksForDate(dueDate) : Promise.resolve([]),
     ]).then(([nextUndated, nextToday, nextFocus]) => {
       if (cancelled) return
       setUndated(nextUndated)
       setTodayTasks(nextToday)
       setFocusTasks(nextFocus)
+      void loadRepeatLabels([nextUndated, nextToday, nextFocus])
     })
     return () => { cancelled = true }
   }, [services.tasks, today, dueDate, showFocusSection, boardRevision])
@@ -1258,8 +1542,18 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
         className="task-composer is-line"
         onSubmit={(event) => {
           event.preventDefault()
-          void services.tasks.createTask({ title, dueDate: dueDate === '' ? undefined : dueDate }).then(() => {
+          const effectiveDue = dueDate === '' ? (repeat === 'never' ? undefined : today) : dueDate
+          const recurrence: RecurrenceDraft | undefined = repeat === 'never' || effectiveDue === undefined
+            ? undefined
+            : {
+                frequency: repeat,
+                interval: 1,
+                weekdays: repeat === 'weekly' ? [weekdayOf(effectiveDue, timezone)] : [],
+                dayOfMonth: repeat === 'monthly' ? Number(effectiveDue.slice(8, 10)) : undefined,
+              }
+          void services.tasks.createTask({ title, dueDate: effectiveDue, recurrence }).then(() => {
             setTitle('')
+            setRepeat('never')
             refresh()
           })
         }}
@@ -1274,7 +1568,7 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
           autoComplete="off"
         />
         <div className="date-shortcuts" role="group" aria-label="Дата для новой задачи">
-          <button type="button" aria-pressed={dueDate === ''} onClick={() => setDueDate('')}>Без даты</button>
+          <button type="button" aria-pressed={dueDate === ''} onClick={() => { setDueDate(''); if (repeat !== 'never') setRepeat('never') }}>Без даты</button>
           <button type="button" aria-pressed={dueDate === today} onClick={() => setDueDate(today)}>Сегодня</button>
           <button type="button" aria-pressed={dueDate === tomorrow} onClick={() => setDueDate(tomorrow)}>Завтра</button>
           <button type="button" aria-pressed={dueDate === nextWeek} onClick={() => setDueDate(nextWeek)}>Через неделю</button>
@@ -1286,6 +1580,21 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
           value={dueDate}
           onChange={(event) => setDueDate(event.target.value)}
         />
+        <select
+          className="task-composer-repeat"
+          aria-label="Повтор"
+          value={repeat}
+          onChange={(event) => {
+            const value = event.target.value as typeof repeat
+            setRepeat(value)
+            if (value !== 'never' && dueDate === '') setDueDate(today)
+          }}
+        >
+          <option value="never">Без повтора</option>
+          <option value="daily">Каждый день</option>
+          <option value="weekly">Каждую неделю</option>
+          <option value="monthly">Каждый месяц</option>
+        </select>
         <button type="submit" className="btn btn-primary">Добавить</button>
       </form>
 
@@ -1294,6 +1603,7 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
           heading="Без даты"
           empty="Пока пусто"
           tasks={undated}
+          repeatLabels={repeatLabels}
           onToggle={(id) => { void services.tasks.toggleCompleted(id).then(refresh) }}
           onDelete={(id) => { void services.tasks.deleteTask(id).then(refresh) }}
         />
@@ -1302,6 +1612,7 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
           empty="На сегодня задач нет"
           tasks={todayTasks}
           dueLabel="Сегодня"
+          repeatLabels={repeatLabels}
           onToggle={(id) => { void services.tasks.toggleCompleted(id).then(refresh) }}
           onDelete={(id) => { void services.tasks.deleteTask(id).then(refresh) }}
         />
@@ -1311,6 +1622,7 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
             empty="На эту дату задач нет"
             tasks={focusTasks}
             dueLabel={focusHeading}
+            repeatLabels={repeatLabels}
             onToggle={(id) => { void services.tasks.toggleCompleted(id).then(refresh) }}
             onDelete={(id) => { void services.tasks.deleteTask(id).then(refresh) }}
           />
@@ -1367,13 +1679,43 @@ function ListsSection({ services, boardRevision = 0 }: { services: AppServices; 
                 <p className="empty-state">Пустой список</p>
               ) : (
                 <ul className="task-list">
-                  {items.map((item) => (
-                    <TaskRow
-                      key={item.id}
-                      title={item.title}
-                      completed={item.completed}
-                      onToggle={() => { void services.lists.toggleItem(item.id).then(refresh) }}
-                    />
+                  {items.map((item, index) => (
+                    <li key={item.id} className="list-item-row">
+                      <TaskRow
+                        title={item.title}
+                        completed={item.completed}
+                        onToggle={() => { void services.lists.toggleItem(item.id).then(refresh) }}
+                        onDelete={() => { void services.lists.deleteItem(item.id).then(refresh) }}
+                      />
+                      <div className="reorder-actions">
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          aria-label="Выше"
+                          disabled={index === 0}
+                          onClick={() => {
+                            const ids = items.map((entry) => entry.id)
+                            ;[ids[index - 1], ids[index]] = [ids[index]!, ids[index - 1]!]
+                            void services.lists.reorderItems(list.id, ids).then(refresh)
+                          }}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          aria-label="Ниже"
+                          disabled={index === items.length - 1}
+                          onClick={() => {
+                            const ids = items.map((entry) => entry.id)
+                            ;[ids[index], ids[index + 1]] = [ids[index + 1]!, ids[index]!]
+                            void services.lists.reorderItems(list.id, ids).then(refresh)
+                          }}
+                        >
+                          ↓
+                        </button>
+                      </div>
+                    </li>
                   ))}
                 </ul>
               )}
@@ -1484,8 +1826,9 @@ function TrashSection({ services, onRestored, boardRevision = 0 }: { services: A
 }
 
 function SettingsSection({
-  theme, onTheme, visibleHours, onVisibleHours, notificationsEnabled, onNotifications, onExport, onImport, onLogout,
+  services, theme, onTheme, visibleHours, onVisibleHours, notificationsEnabled, onNotifications, onExport, onImport, onLogout,
 }: {
+  services: AppServices
   theme: 'light' | 'dark'
   onTheme: (theme: 'light' | 'dark') => void
   visibleHours: VisibleHoursPreference
@@ -1496,9 +1839,96 @@ function SettingsSection({
   onImport: (file: File) => Promise<void>
   onLogout?: () => void
 }) {
+  const [categories, setCategories] = useState<Awaited<ReturnType<LocalCategoriesService['list']>>>([])
+  const [newCategory, setNewCategory] = useState('')
+  const [renameId, setRenameId] = useState<string | undefined>()
+  const [renameValue, setRenameValue] = useState('')
+
+  const reloadCategories = async () => {
+    setCategories(await services.categories.list())
+  }
+  useEffect(() => { void reloadCategories() }, [services.categories])
+
   return (
     <section className="side-panel settings-panel">
       <h1>Настройки</h1>
+
+      <div className="settings-block">
+        <p className="settings-label">Категории</p>
+        <div className="composer-row">
+          <input
+            aria-label="Новая категория"
+            value={newCategory}
+            onChange={(event) => setNewCategory(event.target.value)}
+            placeholder="Название"
+          />
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              if (newCategory.trim() === '') return
+              void services.categories.create({ name: newCategory.trim() }).then(async () => {
+                setNewCategory('')
+                await reloadCategories()
+              })
+            }}
+          >
+            Добавить
+          </button>
+        </div>
+        <ul className="settings-category-list">
+          {categories.map((category) => (
+            <li key={category.id}>
+              {renameId === category.id ? (
+                <div className="composer-row">
+                  <input
+                    aria-label={`Переименовать ${category.name}`}
+                    value={renameValue}
+                    onChange={(event) => setRenameValue(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => {
+                      void services.categories.rename(category.id, renameValue).then(async () => {
+                        setRenameId(undefined)
+                        await reloadCategories()
+                      })
+                    }}
+                  >
+                    Сохранить
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={() => setRenameId(undefined)}>Отмена</button>
+                </div>
+              ) : (
+                <div className="composer-row">
+                  <span>{category.name}</span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      setRenameId(category.id)
+                      setRenameValue(category.name)
+                    }}
+                  >
+                    Переименовать
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      if (!window.confirm(`Удалить категорию «${category.name}»?`)) return
+                      void services.categories.softDelete(category.id).then(reloadCategories)
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <div className="settings-block">
         <p className="settings-label" id="theme-label">Тема оформления</p>
@@ -1583,7 +2013,10 @@ function SettingsSection({
           <input type="checkbox" checked={notificationsEnabled} onChange={(event) => void onNotifications(event.target.checked)} />
           Уведомления браузера
         </label>
-        <p className="hint">Работают только при открытой вкладке и разрешении браузера (раз в ~30 сек проверяем ближайшие события).</p>
+        <p className="hint">
+          Пока вкладка открыта — опрос раз в ~30 сек. После установки PWA (добавить на экран) уведомления идут через service worker;
+          полноценный фон как у Google на iOS Safari не обещаем.
+        </p>
       </div>
 
       <div className="settings-block">

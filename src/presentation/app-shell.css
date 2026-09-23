@@ -16,13 +16,24 @@
 .app-sidebar.is-collapsed {
   width: 52px;
   padding: 16px 6px;
-  gap: 0;
+  gap: 12px;
   align-items: center;
 }
 
-.app-sidebar.is-collapsed .app-sidebar-brand,
-.app-sidebar.is-collapsed .app-nav {
+.app-sidebar.is-collapsed .app-sidebar-brand {
   display: none;
+}
+
+.app-sidebar.is-collapsed .app-nav-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .app-sidebar-brand {
@@ -41,50 +52,110 @@
   flex: 1 1 auto;
   gap: 4px;
   margin: 0;
+  width: 100%;
 }
 
 .app-nav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
   min-height: var(--control-min);
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--text);
+  color: var(--text-muted);
   padding: 10px 12px;
   text-align: left;
   font-weight: 500;
+  transition: background 140ms ease, color 140ms ease;
 }
 
 .app-nav button:hover {
   background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  color: var(--text);
+}
+
+.app-nav button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .app-nav button[aria-current="page"] {
-  background: var(--accent);
-  color: var(--accent-contrast);
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.app-nav-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: inherit;
+}
+
+.app-nav-icon svg {
+  display: block;
+}
+
+.app-nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar.is-collapsed .app-nav button {
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  margin-inline: auto;
 }
 
 .app-sidebar-toggle {
   margin-top: auto;
   width: 100%;
   min-height: var(--control-min);
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 1.35rem;
+  background: transparent;
+  color: var(--text-muted);
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.app-sidebar-toggle:hover {
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.app-sidebar-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.app-sidebar-toggle-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.app-sidebar-toggle:hover {
-  background: var(--surface-2);
+.app-sidebar-toggle-icon svg {
+  display: block;
 }
 
 .app-sidebar.is-collapsed .app-sidebar-toggle {
   width: 40px;
+  min-height: 40px;
   padding: 0;
 }
 
@@ -221,6 +292,17 @@
   font: inherit;
 }
 
+.task-composer.is-line .task-composer-repeat {
+  min-height: var(--control-min);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 8px 2px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
 .task-composer.is-line .date-shortcuts {
   flex: 1 1 auto;
 }
@@ -303,7 +385,7 @@
 .side-panel .task-row,
 .side-panel .trash-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px 10px;
   align-items: center;
   min-height: var(--control-min);
@@ -351,6 +433,12 @@
   border: 0;
   border-radius: 0;
   background: transparent;
+  white-space: nowrap;
+}
+
+.task-row-repeat {
+  font-size: 0.75rem;
+  color: var(--accent);
   white-space: nowrap;
 }
 
@@ -413,6 +501,7 @@
   }
 
   .task-row-due,
+  .task-row-repeat,
   .task-row-delete,
   .trash-row .btn {
     justify-self: start;
@@ -461,13 +550,32 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
 }
 
-.composer-row {
+.plan-checklist-row,
+.list-item-row {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  align-items: end;
+}
+
+.reorder-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.reorder-actions .btn {
+  min-height: 32px;
+  padding: 2px 8px;
+}
+
+.checkbox-row {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  flex-direction: row !important;
 }
 
 .composer-row label {
@@ -1137,21 +1245,34 @@
 
   .calendar-app .app-nav button {
     flex: 1 1 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
     min-width: 0;
     min-height: 44px;
     border: 0;
     border-radius: 10px;
-    padding: 8px 4px;
-    font-size: 0.72rem;
+    padding: 6px 4px;
+    font-size: 0.68rem;
     line-height: 1.15;
     text-align: center;
     background: transparent;
-    color: var(--text);
+    color: var(--text-muted);
+  }
+
+  .calendar-app .app-nav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .calendar-app .app-nav-label {
+    max-width: 100%;
   }
 
   .calendar-app .app-nav button[aria-current="page"] {
     background: color-mix(in srgb, var(--accent) 18%, transparent);
-    color: var(--text);
+    color: var(--accent);
+    font-weight: 600;
   }
 
   .calendar-app .app-main {

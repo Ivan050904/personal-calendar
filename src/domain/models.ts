@@ -71,6 +71,7 @@ export interface Task extends CalendarEntity {
   title: string
   description?: string
   dueDate?: IsoDate
+  recurrenceRuleId?: EntityId
   completed: boolean
 }
 

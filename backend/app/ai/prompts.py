@@ -230,10 +230,16 @@ def _guess_title(message: str) -> str:
         cleaned,
     )
     cleaned = re.sub(
-        r"(?i)\b(?:в|на)\s+\d{1,2}(?:[:.\s]\d{2})?\b",
+        r"(?i)\b(?:в|на|к)\s+\d{1,2}(?:[:.\s]\d{2})?\b",
         " ",
         cleaned,
     )
+    cleaned = re.sub(
+        r"(?i)\b(?:в|на|к)\s+\d{1,2}\s*(?:час(?:а|ов)?|ч\.?)\b",
+        " ",
+        cleaned,
+    )
+    cleaned = re.sub(r"(?i)\b\d{1,2}[:.\s]\d{2}\b", " ", cleaned)
     cleaned = re.sub(r"(?i)\bна\b", " ", cleaned)
     cleaned = re.sub(r"(?i)\b(называется|название)\b", " ", cleaned)
     cleaned = re.sub(
@@ -375,10 +381,31 @@ def _extract_event_bounds(
         end_hm = _parse_hour_minute(ranged.group(2))
 
     if start_hm is None:
-        # Speech often says «на 20.00» / «на 20 00» instead of «в 20:00».
-        single = re.search(r"\b(?:в|на)\s+(\d{1,2}(?:[:.\s]\d{2})?)\b", text)
+        # Speech often says «на 20.00» / «на 20 00» / «к 20» instead of «в 20:00».
+        single = re.search(r"\b(?:в|на|к)\s+(\d{1,2}(?:[:.\s]\d{2})?)\b", text)
         if single:
             start_hm = _parse_hour_minute(single.group(1))
+            if start_hm:
+                end_hm = (start_hm[0] + 1, start_hm[1]) if start_hm[0] < 23 else (23, 59)
+
+    if start_hm is None and _has_explicit_day(text):
+        # «сегодня 20:00» / «завтра 15.30» without в/на.
+        bare = re.search(
+            r"(?:сегодня|завтра|послезавтра).{0,24}?(\d{1,2}[:.\s]\d{2})\b",
+            text,
+        )
+        if bare:
+            start_hm = _parse_hour_minute(bare.group(1))
+            if start_hm:
+                end_hm = (start_hm[0] + 1, start_hm[1]) if start_hm[0] < 23 else (23, 59)
+
+    if start_hm is None:
+        hours_word = re.search(
+            r"\b(?:в|на|к)\s+(\d{1,2})\s*(?:час(?:а|ов)?|ч\.?)\b",
+            text,
+        )
+        if hours_word:
+            start_hm = _parse_hour_minute(hours_word.group(1))
             if start_hm:
                 end_hm = (start_hm[0] + 1, start_hm[1]) if start_hm[0] < 23 else (23, 59)
 
@@ -510,9 +537,27 @@ def enrich_action_from_message(
     if recurrence and not payload.get("recurrence"):
         payload["recurrence"] = recurrence
 
+    wants_all_day = bool(re.search(r"(?i)\b(?:весь\s+день|на\s+весь\s+день|all\s*-?\s*day)\b", user_message))
     has_bounds = bool(payload.get("start") or payload.get("startAt"))
     start_iso, end_iso, missing = _extract_event_bounds(user_message, timezone=timezone)
-    if not has_bounds:
+
+    if wants_all_day and _has_explicit_day(user_message):
+        from datetime import timedelta
+
+        base = _now_in_timezone(timezone) + timedelta(days=_day_offset(user_message.lower()))
+        weekdays = _extract_weekdays(user_message)
+        if weekdays and not _has_relative_day(user_message):
+            base = _next_date_for_weekday(base, weekdays[0])
+        start_iso = base.replace(hour=0, minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
+        end_iso = base.replace(hour=23, minute=59, second=0, microsecond=0).isoformat(timespec="seconds")
+        payload["allDay"] = True
+        payload["start"] = start_iso
+        payload["startAt"] = start_iso
+        payload["end"] = end_iso
+        payload["endAt"] = end_iso
+        missing = []
+        has_bounds = True
+    elif not has_bounds:
         if start_iso:
             payload["start"] = start_iso
             payload["startAt"] = start_iso

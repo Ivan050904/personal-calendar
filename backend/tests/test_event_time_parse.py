@@ -146,3 +146,32 @@ def test_enrich_model_startdate_gap_with_today_na_time():
     title = str(enriched.payload.get("title") or "").lower()
     assert "напомнить" in title
     assert "20" not in title
+
+
+def test_enrich_all_day_phrase():
+    raw = StructuredAction(intent="CREATE", entity_type="event", payload={"title": "отпуск"}, missing_fields=["start"])
+    enriched = enrich_action_from_message(
+        raw,
+        "Создай событие отпуск сегодня на весь день",
+        timezone="UTC",
+    )
+    assert enriched.intent == "CREATE"
+    assert enriched.payload.get("allDay") is True
+    assert str(enriched.payload.get("start") or "").endswith("T00:00:00")
+    assert str(enriched.payload.get("end") or "").endswith("T23:59:00")
+    assert enriched.missing_fields == []
+    bare = heuristic_propose(
+        "Создай событие сегодня 18:30 позвонить маме",
+        timezone="UTC",
+    )
+    assert bare is not None
+    assert bare.intent == "CREATE"
+    assert str(bare.payload.get("start") or "").endswith("T18:30:00")
+
+    with_k = heuristic_propose(
+        "Создай событие завтра к 9 часам зарядка",
+        timezone="UTC",
+    )
+    assert with_k is not None
+    assert with_k.intent == "CREATE"
+    assert str(with_k.payload.get("start") or "").endswith("T09:00:00")

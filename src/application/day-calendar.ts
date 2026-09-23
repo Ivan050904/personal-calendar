@@ -20,6 +20,8 @@ export interface EventDraft {
   startAt: string
   endAt: string
   color: string
+  allDay?: boolean
+  categoryId?: string
   recurrence?: RecurrenceDraft
 }
 
@@ -76,7 +78,8 @@ export class LocalDayCalendarService implements DayCalendarService {
       endAt: draft.endAt,
       color: draft.color,
       timezone: this.calendar.timezone,
-      allDay: false,
+      allDay: Boolean(draft.allDay),
+      categoryId: draft.categoryId,
       recurrenceRuleId,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -213,6 +216,8 @@ export class LocalDayCalendarService implements DayCalendarService {
       endAt: draft.endAt,
       color: draft.color,
       timezone: this.calendar.timezone,
+      allDay: draft.allDay ?? existing.allDay,
+      categoryId: draft.categoryId !== undefined ? draft.categoryId : existing.categoryId,
       recurrenceRuleId,
       updatedAt: timestamp,
     }
@@ -320,6 +325,13 @@ export function zonedInputToIso(value: string, timezone: string): string {
 export function isoToZonedInput(value: string, timezone: string): string {
   const parts = dateTimeParts(new Date(value), timezone)
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
+}
+
+export function allDayBounds(date: string, timezone: string): { startAt: string; endAt: string } {
+  return {
+    startAt: zonedInputToIso(`${date}T00:00`, timezone),
+    endAt: zonedInputToIso(`${date}T23:59`, timezone),
+  }
 }
 
 export function overlaps(candidate: Pick<Event, 'id' | 'startAt' | 'endAt'>, events: Event[]): boolean {

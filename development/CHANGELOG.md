@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+### Changed (Sidebar nav polish)
+
+- Primary nav: inline SVG icons, quieter active/hover tint (no solid accent fill), icon-only rail when collapsed, SVG chevron toggle; mobile tabs use icon-over-label.
+
+### Changed (Wave 6 · Reminder PWA)
+
+- Manifest + `/sw.js`; reminders prefer SW `showNotification`; settings copy documents tab vs PWA limits (D28).
+
+### Changed (Wave 5 · Week DnD)
+
+- Drag events across week slots via `moveEvent` (plans not draggable).
+
+### Changed (Wave 4 · Lists / plan checklist)
+
+- List item delete + ↑↓ reorder; plan checklist delete + reorder.
+
+### Changed (Wave 3 · Categories)
+
+- EventForm category select; Settings CRUD for categories.
+
+### Changed (Wave 2 · All-day)
+
+- EventForm «Весь день»; day/week all-day strip; AI «весь день» → allDay (D27).
+
+### Changed (Wave 1 · Plans on week)
+
+- Week grid shows plans as dashed blocks; click opens dock checklist for that day.
+
+### Fixed (Wave 0 · AI speech time)
+
+- Parse `к 9 часам`, bare `сегодня 18:30`, and clearer draft missing-field labels (время vs дата).
+
+### Added (Recurring tasks · D26 / ADR-015)
+
+- Tasks can repeat daily / weekly / monthly (reuse `RecurrenceRule`); due date required.
+- Completing a recurring task advances `dueDate` to the next occurrence (rolling).
+- Tasks form: «Повтор» select; Today / «Сегодня» also show incomplete overdue dated tasks.
+- Backend: `tasks.recurrence_rule_id` + Alembic migration.
+
 ### Fixed (AI «сегодня» + «на 20.00»)
 
 - Parse speech times `на 20.00` / `на 20 00` (not only `в …`); keep «сегодня» as explicit date so drafts fill start/end instead of asking again.

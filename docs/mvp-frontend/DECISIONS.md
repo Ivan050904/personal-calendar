@@ -13,7 +13,10 @@ A Calendar exists even without an account to make future account binding straigh
 A recurring event is an Event plus RecurrenceRule. Individual changes are EventExceptions.
 
 ## ADR-005 — Regular activities are events
-No separate Habit entity in MVP. Repeated life activities use recurring events.
+No separate Habit entity in MVP. Timed repeating life activities use recurring events.
+
+## ADR-015 — Date-only recurring chores are tasks
+Completion-based, date-only repeating chores (e.g. meter readings) are Tasks with an optional `recurrenceRuleId` reusing `RecurrenceRule`. They never occupy timeline hours. Completing a recurring task advances `dueDate` to the next occurrence and leaves `completed=false` (rolling due date). When no next occurrence remains (`untilDate` / exhausted `occurrenceCount`), the task stays on the last due date with `completed=true`. Undated tasks cannot have recurrence.
 
 ## ADR-006 — Tasks vs plan tasks
 Standalone Task and PlanTask are separate concepts. PlanTask belongs to a Plan and has no own time in MVP.

@@ -101,6 +101,7 @@ class TaskDTO(CamelModel):
     title: str
     description: str | None = None
     due_date: str | None = None
+    recurrence_rule_id: str | None = None
     completed: bool = False
     created_at: str
     updated_at: str
