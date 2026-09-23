@@ -33,8 +33,8 @@ class OpenAICompatibleProvider:
         api_key: str,
         base_url: str,
         model: str,
-        timeout_seconds: float = 30.0,
-        max_retries: int = 2,
+        timeout_seconds: float = 45.0,
+        max_retries: int = 1,
     ) -> None:
         self.name = name
         self.api_key = api_key

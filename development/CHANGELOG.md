@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed (AI latency)
+
+- Production AI switched from slow NVIDIA DeepSeek (~50s, timeouts) to Groq `openai/gpt-oss-20b` via NL proxy (~1s).
+
 ### Fixed (Whisper via NL proxy)
 
 - Beget cannot call `api.groq.com` (403); production Whisper goes through Folio AI proxy `/groq/v1` with the proxy token.

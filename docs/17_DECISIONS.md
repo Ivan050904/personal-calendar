@@ -48,3 +48,4 @@ D23 — Production Whisper is remote via Folio AI proxy Groq path (http://91.186
 
 D24 — Plans become first-class in day dock: create plan, expand checklist, toggle/add items; plans also render on the day timeline. Browser reminders poll due offsets while the tab is open and notifications are enabled.
 
+D25 — Production AI chat uses Folio AI proxy Groq path (http://91.186.214.4:8787/groq/v1, model openai/gpt-oss-20b) because NVIDIA DeepSeek reasoning models exceed the API timeout from Beget (~50s). Whisper already uses the same proxy Groq path (D23).
