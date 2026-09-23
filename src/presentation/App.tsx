@@ -3,7 +3,9 @@ import type { Event, Weekday } from '../domain/models'
 import {
   dateKey,
   eventHour,
+  hourInTimezone,
   isoToZonedInput,
+  minuteInTimezone,
   zonedInputToIso,
   type DayCalendarService,
   type DeleteScope,
@@ -170,6 +172,8 @@ export function App({
     setDraft({ title: '', description: '', startAt: start, endAt: end, color: DEFAULT_COLOR })
   }
 
+  const createAtNow = () => createAtHour(hourInTimezone(now(), calendar.calendar.timezone))
+
   useEffect(() => {
     let cancelled = false
     void calendar.listEvents(selectedDate).then((nextEvents) => {
@@ -184,7 +188,7 @@ export function App({
     if (selectedDate !== todayKey) return
     const node = dayTimelineRef.current
     if (!node) return
-    const hour = now().getHours()
+    const hour = hourInTimezone(now(), calendar.calendar.timezone)
     const forced = events.flatMap((event) => occupiedHours(event.startAt, event.endAt, event.timezone || calendar.calendar.timezone))
     const visible = buildVisibleHours(visibleHoursPref, [...forced, hour])
     const target = Math.max(0, displayOffsetPx(visible, hour) - HOUR_ROW_PX)
@@ -194,7 +198,7 @@ export function App({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
-      if (event.key === 'n') createAtHour(now().getHours())
+      if (event.key === 'n') createAtNow()
       if (event.key === 't') setSection('tasks')
       if (event.key === 'a') setSection('assistant')
       if (event.key === 'ArrowLeft') setSelectedDate((date) => addDays(date, -1))
@@ -279,8 +283,8 @@ export function App({
   }
 
   const todayKey = dateKey(now(), calendar.calendar.timezone)
-  const nowHour = now().getHours()
-  const nowMinute = now().getMinutes()
+  const nowHour = hourInTimezone(now(), calendar.calendar.timezone)
+  const nowMinute = minuteInTimezone(now(), calendar.calendar.timezone)
   const showNowLine = view === 'day' && selectedDate === todayKey
   const dayVisibleHours = useMemo(() => {
     const forced = events.flatMap((event) =>
@@ -371,7 +375,7 @@ export function App({
                 <button type="button" className="btn btn-ghost" aria-pressed={view === 'week'} onClick={() => setView('week')}>Неделя</button>
                 <button type="button" className="btn btn-ghost" aria-pressed={view === 'month'} onClick={() => setView('month')}>Месяц</button>
               </div>
-              <button type="button" className="btn btn-primary desktop-new-event" onClick={() => createAtHour(now().getHours())}>Новое событие</button>
+              <button type="button" className="btn btn-primary desktop-new-event" onClick={createAtNow}>Новое событие</button>
             </div>
           </header>
           <div className="filters">
@@ -408,7 +412,7 @@ export function App({
               {events.length === 0 && (
                 <div className="day-empty" role="status">
                   <p className="empty-state">На этот день событий нет</p>
-                  <button type="button" className="btn btn-primary desktop-new-event" onClick={() => createAtHour(now().getHours())}>Создать событие</button>
+                  <button type="button" className="btn btn-primary desktop-new-event" onClick={createAtNow}>Создать событие</button>
                 </div>
               )}
               {dayVisibleHours.map((hour) => {
@@ -462,6 +466,7 @@ export function App({
               onEditEvent={openEvent}
               now={now}
               visibleHoursPref={visibleHoursPref}
+              boardRevision={boardRevision}
             />
           )}
           {view === 'month' && (
@@ -471,9 +476,9 @@ export function App({
               now={now}
               onSelectDate={setSelectedDate}
               onOpenDay={(date) => { setSelectedDate(date); setView('day') }}
+              boardRevision={boardRevision}
             />
-          )}
-          {view !== 'now' && (
+          )}          {view !== 'now' && (
             <details className="calendar-dock">
               <summary>Планы и задачи на день</summary>
               <div className="dock-body">
@@ -485,7 +490,7 @@ export function App({
           <button
             type="button"
             className="fab-new-event"
-            onClick={() => createAtHour(now().getHours())}
+            onClick={createAtNow}
             aria-label="Новое событие"
           >
             +
@@ -531,7 +536,17 @@ export function App({
         />
       )}
 
-      {draft !== undefined && <EventForm draft={draft} timezone={calendar.calendar.timezone} reminders={services.reminders} editingId={editing?.id} onCancel={() => { setDraft(undefined); setEditing(undefined) }} onSubmit={async (nextDraft, offsets) => submit(nextDraft, offsets)} />}
+      {draft !== undefined && (
+        <EventForm
+          key={editing?.id ?? `new-${draft.startAt}`}
+          draft={draft}
+          timezone={calendar.calendar.timezone}
+          reminders={services.reminders}
+          editingId={editing?.id}
+          onCancel={() => { setDraft(undefined); setEditing(undefined) }}
+          onSubmit={async (nextDraft, offsets) => submit(nextDraft, offsets)}
+        />
+      )}
       {pendingScope !== undefined && <ScopeDialog kind={pendingScope.kind} onCancel={() => setPendingScope(undefined)} onChoose={(scope) => void applyScope(scope)} />}
       {warning !== undefined && <p className="status-banner" role="status">{warning}</p>}
       {status !== undefined && <p className="status-banner" role="status">{status}</p>}
@@ -657,7 +672,15 @@ function EventForm({ draft, timezone, reminders, editingId, onCancel, onSubmit }
       <form className="event-form-card" onClick={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submit() }}>
         <h2>Событие</h2>
         <label>Название<input required value={value.title} onChange={(event) => setValue({ ...value, title: event.target.value })} /></label>
-        <label>Начало<input required type="datetime-local" value={isoToZonedInput(value.startAt, timezone)} onChange={(event) => setValue({ ...value, startAt: zonedInputToIso(event.target.value, timezone) })} /></label>
+        <label>Начало<input required type="datetime-local" value={isoToZonedInput(value.startAt, timezone)} onChange={(event) => {
+          const nextStart = zonedInputToIso(event.target.value, timezone)
+          const durationMs = Math.max(60_000, Date.parse(value.endAt) - Date.parse(value.startAt))
+          setValue({
+            ...value,
+            startAt: nextStart,
+            endAt: new Date(Date.parse(nextStart) + durationMs).toISOString(),
+          })
+        }} /></label>
         <label>Окончание<input required type="datetime-local" value={isoToZonedInput(value.endAt, timezone)} onChange={(event) => setValue({ ...value, endAt: zonedInputToIso(event.target.value, timezone) })} /></label>
 
         <details className="form-disclosure" open={repeat !== 'never'}>

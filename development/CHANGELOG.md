@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed (Event date/time shift · D21)
+
+- Week/month calendars refresh after save (no more stale “Physical” stuck on Saturday).
+- Calendar timezone syncs to the device; existing events keep the same wall clock when the zone was wrong (e.g. UTC seed).
+- AI draft times and “now” / FAB use calendar timezone helpers instead of brittle `Date` local parsing.
+
 ### Added (CI auto-deploy · D20)
 
 - GitHub Actions workflow on push to `main`: build SPA and run `scripts/deploy_calendar.py` to Beget using secret `BEGET_SSH_PASSWORD`.

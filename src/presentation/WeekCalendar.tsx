@@ -17,6 +17,7 @@ export function WeekCalendar({
   onEditEvent,
   now = () => new Date(),
   visibleHoursPref,
+  boardRevision = 0,
 }: {
   calendar: DayCalendarService
   selectedDate: string
@@ -24,6 +25,7 @@ export function WeekCalendar({
   onEditEvent: (event: Event) => void
   now?: () => Date
   visibleHoursPref: VisibleHoursPreference
+  boardRevision?: number
 }) {
   const weekStart = mondayOf(selectedDate)
   const [segments, setSegments] = useState<ReturnType<typeof weekSegments>>([])
@@ -35,11 +37,18 @@ export function WeekCalendar({
       if (!cancelled) setSegments(weekSegments(events, weekStart, calendar.calendar.timezone))
     })
     return () => { cancelled = true }
-  }, [calendar, weekStart])
+  }, [calendar, weekStart, boardRevision])
 
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index))
   const todayKey = dateKey(now(), calendar.calendar.timezone)
-  const nowHour = now().getHours()
+  const nowHour = (() => {
+    const hour = new Intl.DateTimeFormat('en-US', {
+      timeZone: calendar.calendar.timezone,
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(now()).find((part) => part.type === 'hour')?.value
+    return Number(hour ?? '0')
+  })()
   const weekEnd = addDays(weekStart, 6)
   const visibleHours = useMemo(() => {
     const forced = segments.flatMap((segment) =>

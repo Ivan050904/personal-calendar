@@ -44,7 +44,9 @@ export class LocalDayCalendarService implements DayCalendarService {
   ) {}
 
   async listEvents(date: string): Promise<Event[]> {
-    return (await this.listEventsInRange(date, date)).filter((event) => dateKey(event.startAt, event.timezone) === date)
+    return (await this.listEventsInRange(date, date)).filter(
+      (event) => dateKey(event.startAt, event.timezone || this.calendar.timezone) === date,
+    )
   }
 
   async listEventsInRange(startDate: string, endDate: string): Promise<Event[]> {
@@ -210,6 +212,7 @@ export class LocalDayCalendarService implements DayCalendarService {
       startAt: draft.startAt,
       endAt: draft.endAt,
       color: draft.color,
+      timezone: this.calendar.timezone,
       recurrenceRuleId,
       updatedAt: timestamp,
     }
@@ -276,6 +279,23 @@ export function eventHour(event: Event): number {
     hourCycle: 'h23',
   }).formatToParts(new Date(event.startAt)).find((part) => part.type === 'hour')?.value
   return Number(hour ?? '0')
+}
+
+export function hourInTimezone(value: Date, timezone: string): number {
+  const hour = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(value).find((part) => part.type === 'hour')?.value
+  return Number(hour ?? '0')
+}
+
+export function minuteInTimezone(value: Date, timezone: string): number {
+  const minute = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    minute: '2-digit',
+  }).formatToParts(value).find((part) => part.type === 'minute')?.value
+  return Number(minute ?? '0')
 }
 
 function dateTimeParts(value: Date, timezone: string): Record<string, string> {

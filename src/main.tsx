@@ -68,7 +68,12 @@ function AppBoot({ onLogout }: { onLogout?: () => void }) {
       try {
         const { repositories, reminderRepo } = await loadRepositories()
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-        const calendar = await ensureLocalCalendar(repositories.calendars, timezone)
+        const calendar = await ensureLocalCalendar(
+          repositories.calendars,
+          timezone,
+          () => new Date().toISOString(),
+          repositories.events,
+        )
         const reminders = new LocalRemindersService(reminderRepo)
         if (cancelled) return
         setReady({

@@ -9,12 +9,14 @@ export function MonthCalendar({
   onSelectDate,
   onOpenDay,
   now = () => new Date(),
+  boardRevision = 0,
 }: {
   calendar: DayCalendarService
   selectedDate: string
   onSelectDate: (date: string) => void
   now?: () => Date
   onOpenDay: (date: string) => void
+  boardRevision?: number
 }) {
   const month = selectedDate.slice(0, 7)
   const [events, setEvents] = useState<Record<string, string[]>>({})
@@ -28,13 +30,13 @@ export function MonthCalendar({
     void calendar.listEventsInRange(rangeStart, rangeEnd).then((items) => {
       if (cancelled) return
       setEvents(items.reduce<Record<string, string[]>>((value, event) => {
-        const key = dateKey(event.startAt, event.timezone)
+        const key = dateKey(event.startAt, event.timezone || calendar.calendar.timezone)
         ;(value[key] ??= []).push(event.title)
         return value
       }, {}))
     })
     return () => { cancelled = true }
-  }, [calendar, rangeEnd, rangeStart])
+  }, [calendar, rangeEnd, rangeStart, boardRevision])
 
   const [year, monthNumber] = month.split('-').map(Number)
   const monthLabel = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: calendar.calendar.timezone })

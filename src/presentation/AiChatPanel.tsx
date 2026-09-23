@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { isoToZonedInput, zonedInputToIso } from '../application/day-calendar'
 
 export interface AiDraftCard {
   draftId: string
@@ -99,23 +100,26 @@ function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function toLocalInput(value: unknown): string {
-  if (typeof value !== 'string' || !value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    // already datetime-local-ish
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return value.slice(0, 16)
-    return value
-  }
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+function deviceTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 }
 
-function localInputToIso(value: string): string | undefined {
-  if (!value) return undefined
+function toLocalInput(value: unknown, timezone = deviceTimezone()): string {
+  if (typeof value !== 'string' || !value) return ''
+  // Naive wall-clock from AI — keep as datetime-local digits.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(value.slice(0, 25))) {
+    return value.slice(0, 16)
+  }
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toISOString()
+  if (Number.isNaN(date.getTime())) return value.slice(0, 16)
+  return isoToZonedInput(value, timezone)
+}
+
+function localInputToIso(value: string, timezone = deviceTimezone()): string | undefined {
+  if (!value) return undefined
+  const normalized = value.length >= 16 ? value.slice(0, 16) : value
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) return value
+  return zonedInputToIso(normalized, timezone)
 }
 
 function readRecurrence(payload: Record<string, unknown>): {
@@ -160,6 +164,7 @@ function formToPayload(form: DraftFormState): Record<string, unknown> {
     payload.startAt = payload.start
     payload.end = localInputToIso(form.end)
     payload.endAt = payload.end
+    payload.timezone = deviceTimezone()
   }
   if (form.entityType === 'task') {
     payload.dueDate = form.dueDate || undefined

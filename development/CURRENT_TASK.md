@@ -1,9 +1,10 @@
 # Current Task
 
-CI auto-deploy (D20) + visible hours (D19) shipping.
+Timezone / week refresh fix (D21).
 
 Done:
-- D19 visible hours in Settings
-- D20 GitHub Actions → Beget on push to main
+- Week+month reload after event save
+- Device timezone sync + wall-clock reinterpret
+- AI datetime helpers fixed
 
 STOP.

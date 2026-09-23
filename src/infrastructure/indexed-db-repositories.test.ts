@@ -42,7 +42,7 @@ describe('IndexedDB repositories', () => {
     await expect(repositories.tasks.listByCalendarId('another-calendar')).resolves.toEqual([])
   })
 
-  it('creates one local calendar without categories', async () => {
+  it('creates one local calendar without categories and syncs timezone on later boot', async () => {
     const repositories = await repositoriesForTest()
 
     const calendar = await ensureLocalCalendar(
@@ -50,10 +50,17 @@ describe('IndexedDB repositories', () => {
       'Asia/Vladivostok',
       () => '2026-09-17T00:00:00.000Z',
     )
-    const repeated = await ensureLocalCalendar(repositories.calendars, 'Asia/Tokyo')
+    const repeated = await ensureLocalCalendar(
+      repositories.calendars,
+      'Asia/Tokyo',
+      () => '2026-09-17T01:00:00.000Z',
+      repositories.events,
+    )
 
     expect(calendar.name).toBe('Personal Calendar')
-    expect(repeated).toEqual(calendar)
+    expect(calendar.timezone).toBe('Asia/Vladivostok')
+    expect(repeated.id).toBe(calendar.id)
+    expect(repeated.timezone).toBe('Asia/Tokyo')
     await expect(repositories.categories.list()).resolves.toEqual([])
   })
 })
