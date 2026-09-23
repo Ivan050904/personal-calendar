@@ -204,8 +204,8 @@ export function App({
       if (event.key === 'n') createAtNow()
       if (event.key === 't') setSection('tasks')
       if (event.key === 'a') setSection('assistant')
-      if (event.key === 'ArrowLeft') setSelectedDate((date) => addDays(date, -1))
-      if (event.key === 'ArrowRight') setSelectedDate((date) => addDays(date, 1))
+      if (event.key === 'ArrowLeft') setSelectedDate((date) => addDays(date, view === 'week' ? -7 : -1))
+      if (event.key === 'ArrowRight') setSelectedDate((date) => addDays(date, view === 'week' ? 7 : 1))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -368,9 +368,23 @@ export function App({
             </div>
             <div className="toolbar toolbar-scroll">
               <div className="toolbar-group" role="group" aria-label="Дата">
-                <button type="button" className="btn btn-ghost" onClick={() => setSelectedDate(addDays(selectedDate, -1))} aria-label="Предыдущий день">←</button>
-                <button type="button" className="btn btn-ghost" onClick={() => { setSelectedDate(todayKey); setView('day') }}>Сегодня</button>
-                <button type="button" className="btn btn-ghost" onClick={() => setSelectedDate(addDays(selectedDate, 1))} aria-label="Следующий день">→</button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setSelectedDate(addDays(selectedDate, view === 'week' ? -7 : -1))}
+                  aria-label={view === 'week' ? 'Предыдущая неделя' : 'Предыдущий день'}
+                >
+                  ←
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => { setSelectedDate(todayKey); setView(view === 'week' ? 'week' : 'day') }}>Сегодня</button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setSelectedDate(addDays(selectedDate, view === 'week' ? 7 : 1))}
+                  aria-label={view === 'week' ? 'Следующая неделя' : 'Следующий день'}
+                >
+                  →
+                </button>
               </div>
               <div className="toolbar-group" role="group" aria-label="Вид">
                 <button type="button" className="btn btn-ghost" aria-pressed={view === 'now'} onClick={() => setView('now')}>Сейчас</button>
@@ -631,8 +645,15 @@ function EventForm({ draft, timezone, reminders, editingId, onCancel, onSubmit }
   onCancel: () => void
   onSubmit: (draft: EventDraft, reminderOffsets: number[]) => Promise<void>
 }) {
+  type RepeatMode = 'never' | 'daily' | 'every_n_days' | RecurrenceDraft['frequency']
+  const initialInterval = Math.max(1, draft.recurrence?.interval ?? 1)
   const [value, setValue] = useState(draft)
-  const [repeat, setRepeat] = useState<'never' | RecurrenceDraft['frequency']>(draft.recurrence?.frequency ?? 'never')
+  const [repeat, setRepeat] = useState<RepeatMode>(() => {
+    if (draft.recurrence === undefined) return 'never'
+    if (draft.recurrence.frequency === 'daily' && initialInterval > 1) return 'every_n_days'
+    return draft.recurrence.frequency
+  })
+  const [intervalDays, setIntervalDays] = useState(String(initialInterval > 1 ? initialInterval : 2))
   const [weekdays, setWeekdays] = useState<Weekday[]>(draft.recurrence?.weekdays ?? [])
   const [endMode, setEndMode] = useState<'never' | 'until' | 'count'>(
     draft.recurrence?.untilDate !== undefined ? 'until' : draft.recurrence?.occurrenceCount !== undefined ? 'count' : 'never',
@@ -658,11 +679,12 @@ function EventForm({ draft, timezone, reminders, editingId, onCancel, onSubmit }
   }
 
   const submit = async () => {
+    const parsedInterval = Math.max(2, Math.trunc(Number(intervalDays)) || 2)
     const recurrence: RecurrenceDraft | undefined = repeat === 'never'
       ? undefined
       : {
-          frequency: repeat,
-          interval: 1,
+          frequency: repeat === 'every_n_days' ? 'daily' : repeat,
+          interval: repeat === 'every_n_days' ? parsedInterval : 1,
           weekdays: repeat === 'weekdays' || repeat === 'weekly' ? weekdays : [],
           dayOfMonth: repeat === 'monthly' ? Number(isoToZonedInput(value.startAt, timezone).slice(8, 10)) : undefined,
           untilDate: endMode === 'until' && untilDate !== '' ? untilDate : undefined,
@@ -693,6 +715,21 @@ function EventForm({ draft, timezone, reminders, editingId, onCancel, onSubmit }
             <legend className="sr-only">Повтор</legend>
             <label><input type="radio" name="repeat" checked={repeat === 'never'} onChange={() => setRepeat('never')} /> Без повтора</label>
             <label><input type="radio" name="repeat" checked={repeat === 'daily'} onChange={() => setRepeat('daily')} /> Каждый день</label>
+            <label><input type="radio" name="repeat" checked={repeat === 'every_n_days'} onChange={() => setRepeat('every_n_days')} /> Раз в N дней</label>
+            {repeat === 'every_n_days' && (
+              <label>
+                Каждые
+                <input
+                  aria-label="Интервал в днях"
+                  type="number"
+                  min={2}
+                  max={365}
+                  value={intervalDays}
+                  onChange={(event) => setIntervalDays(event.target.value)}
+                />
+                дн.
+              </label>
+            )}
             <label><input type="radio" name="repeat" checked={repeat === 'weekly'} onChange={() => setRepeat('weekly')} /> Каждую неделю</label>
             <label><input type="radio" name="repeat" checked={repeat === 'weekdays'} onChange={() => setRepeat('weekdays')} /> По дням недели</label>
             <label><input type="radio" name="repeat" checked={repeat === 'monthly'} onChange={() => setRepeat('monthly')} /> Каждый месяц</label>
@@ -1387,7 +1424,7 @@ function SettingsSection({
           <li><kbd>N</kbd> — новое событие</li>
           <li><kbd>T</kbd> — раздел «Задачи»</li>
           <li><kbd>A</kbd> — раздел «Ассистент»</li>
-          <li><kbd>←</kbd> / <kbd>→</kbd> — соседний день</li>
+          <li><kbd>←</kbd> / <kbd>→</kbd> — соседний день (в неделе — соседняя неделя)</li>
           <li><kbd>Esc</kbd> — закрыть форму</li>
         </ul>
       </div>

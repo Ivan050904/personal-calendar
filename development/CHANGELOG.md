@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed (Week nav + every-N-days · D22)
+
+- Week view ←/→ (and keyboard) moves by one week.
+- Event form: «Раз в N дней» with user-chosen interval (stored as daily + interval).
+
 ### Changed (Week empty-cell create)
 
 - Clicking an empty week grid cell opens the create-event form for that day and hour (same as day view hour slots).

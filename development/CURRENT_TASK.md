@@ -1,8 +1,9 @@
 # Current Task
 
-Week empty-cell create event.
+Week nav ±7 days + every-N-days recurrence (D22).
 
 Done:
-- Click empty week cell → create form for that day/hour
+- Week arrows/keyboard jump by week
+- Form: «Раз в N дней» (daily + interval)
 
 STOP.

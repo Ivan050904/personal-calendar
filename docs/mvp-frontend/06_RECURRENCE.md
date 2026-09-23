@@ -2,10 +2,12 @@
 
 ## Frequencies
 
-1. Daily
+1. Daily (every day, or every N days via `interval`)
 2. Weekly
 3. Selected weekdays
 4. Monthly
+
+`interval` defaults to 1. For daily, `interval: 3` means every 3 days from the series start.
 
 ## End conditions
 

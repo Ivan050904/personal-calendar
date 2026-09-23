@@ -41,3 +41,5 @@ D19 — Visible day/week hours are a local preference (localStorage), not a doma
 D20 — Production auto-deploy: push to `main` (or manual `workflow_dispatch`) runs GitHub Actions `.github/workflows/deploy.yml` — `npm ci` + `npm run build` then `scripts/deploy_calendar.py` over SSH to Beget (`calendar.folio-one.ru`). SSH password lives in repo secret `BEGET_SSH_PASSWORD` (never in git). Server `.env` is preserved across redeploys (D18).
 
 D21 — Calendar timezone follows the device IANA zone on boot (`ensureLocalCalendar`). If the stored calendar zone differs, event wall-clock times are reinterpreted so the same local clock face is kept. Week/month views reload on `boardRevision` after create/update/delete. AI draft datetime fields use `zonedInputToIso` / `isoToZonedInput` (not `Date` local parsing). Now-line and “new event at now” use calendar timezone hours.
+
+D22 — Week view date arrows / keyboard jump by 7 days (not 1). Event form exposes every-N-days as frequency daily + user interval (>=2); domain already supported interval for daily generation.

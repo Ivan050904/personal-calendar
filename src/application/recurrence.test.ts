@@ -197,6 +197,22 @@ describe('recurrence generation', () => {
     expect(occurrences[1]?.event.startAt).toBe('2026-03-08T13:00:00.000Z')
   })
 
+  it('supports daily interval greater than one (every N days)', () => {
+    const occurrences = generateOccurrences(
+      baseEvent,
+      rule({ frequency: 'daily', interval: 3 }),
+      [],
+      '2026-09-17',
+      '2026-09-26',
+    )
+    expect(occurrences.map((item) => item.occurrenceKey)).toEqual([
+      '2026-09-17T09:00',
+      '2026-09-20T09:00',
+      '2026-09-23T09:00',
+      '2026-09-26T09:00',
+    ])
+  })
+
   it('clamps month-end days to the last day of shorter months (ADR-012)', () => {
     expect(clampDayOfMonth(2026, 2, 31)).toBe(28)
     expect(clampDayOfMonth(2028, 2, 31)).toBe(29)
