@@ -427,11 +427,54 @@
 .empty-hint { color: var(--text-muted); font-size: 0.9rem; }
 
 .plan-block {
-  border-left: 2px solid;
-  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  padding: 10px 12px;
   margin: 8px 0;
   background: var(--surface-2);
   border-radius: 0 8px 8px 0;
+  display: grid;
+  gap: 8px;
+}
+
+.plan-block-toggle {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+
+.plan-checklist ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.plan-checklist label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+
+.composer-row label {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 120px;
 }
 
 .search-results {

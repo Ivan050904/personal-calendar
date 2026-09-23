@@ -161,6 +161,10 @@ def write_server_env(client: paramiko.SSHClient, db_password: str) -> None:
             f"GROQ_API_KEY={groq}",
             "GROQ_BASE_URL=https://api.groq.com/openai/v1",
             "GROQ_MODEL=openai/gpt-oss-20b",
+            "WHISPER_BACKEND=remote",
+            "WHISPER_API_BASE_URL=https://api.groq.com/openai/v1",
+            f"WHISPER_API_KEY={groq}",
+            "WHISPER_REMOTE_MODEL=whisper-large-v3-turbo",
             "WHISPER_MODEL=small",
             "",
         ]
@@ -169,6 +173,33 @@ def write_server_env(client: paramiko.SSHClient, db_password: str) -> None:
     with sftp.open(f"{APP_DIR}/backend/.env", "w") as remote:
         remote.write(body)
     sftp.close()
+
+
+def ensure_remote_whisper_env(client: paramiko.SSHClient) -> None:
+    """Force production Whisper to remote Groq — never install local torch/whisper on Beget."""
+    local = read_local_backend_env()
+    groq = (local.get("GROQ_API_KEY") or local.get("AI_API_KEY") or "").replace("'", "'\\''")
+    cmd = (
+        f"ENV={APP_DIR}/backend/.env; touch \"$ENV\"; "
+        "grep -q '^APP_ENV=' \"$ENV\" && sed -i 's/^APP_ENV=.*/APP_ENV=production/' \"$ENV\" || echo 'APP_ENV=production' >> \"$ENV\"; "
+        "grep -q '^WHISPER_BACKEND=' \"$ENV\" && sed -i 's/^WHISPER_BACKEND=.*/WHISPER_BACKEND=remote/' \"$ENV\" || echo 'WHISPER_BACKEND=remote' >> \"$ENV\"; "
+        "grep -q '^WHISPER_API_BASE_URL=' \"$ENV\" && sed -i 's|^WHISPER_API_BASE_URL=.*|WHISPER_API_BASE_URL=https://api.groq.com/openai/v1|' \"$ENV\" || echo 'WHISPER_API_BASE_URL=https://api.groq.com/openai/v1' >> \"$ENV\"; "
+        "grep -q '^WHISPER_REMOTE_MODEL=' \"$ENV\" && sed -i 's/^WHISPER_REMOTE_MODEL=.*/WHISPER_REMOTE_MODEL=whisper-large-v3-turbo/' \"$ENV\" || echo 'WHISPER_REMOTE_MODEL=whisper-large-v3-turbo' >> \"$ENV\"; "
+    )
+    if groq:
+        cmd += (
+            f"grep -q '^WHISPER_API_KEY=' \"$ENV\" && sed -i 's|^WHISPER_API_KEY=.*|WHISPER_API_KEY={groq}|' \"$ENV\" || echo 'WHISPER_API_KEY={groq}' >> \"$ENV\"; "
+        )
+    else:
+        cmd += (
+            "G=$(grep '^GROQ_API_KEY=' \"$ENV\" | head -1 | cut -d= -f2-); "
+            "A=$(grep '^AI_API_KEY=' \"$ENV\" | head -1 | cut -d= -f2-); "
+            "KEY=${G:-$A}; "
+            "if [ -n \"$KEY\" ]; then "
+            "grep -q '^WHISPER_API_KEY=' \"$ENV\" && sed -i \"s|^WHISPER_API_KEY=.*|WHISPER_API_KEY=$KEY|\" \"$ENV\" || echo \"WHISPER_API_KEY=$KEY\" >> \"$ENV\"; "
+            "fi; "
+        )
+    run(client, cmd)
 
 
 def ensure_venv_and_migrate(client: paramiko.SSHClient) -> None:
@@ -424,6 +455,8 @@ def main() -> None:
     ensure_mariadb(client, db_password)
     print("Env…")
     write_server_env(client, db_password)
+    print("Whisper remote…")
+    ensure_remote_whisper_env(client)
     print("Python deps + migrations…")
     ensure_venv_and_migrate(client)
     print("systemd…")

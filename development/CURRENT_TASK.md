@@ -1,9 +1,10 @@
 # Current Task
 
-Week nav ±7 days + every-N-days recurrence (D22).
+Remote Whisper (D23) + Plans/reminders audit Must (D24).
 
 Done:
-- Week arrows/keyboard jump by week
-- Form: «Раз в N дней» (daily + interval)
+- Prod Whisper via Groq remote only
+- Plans create/checklist on day + timeline blocks
+- Reminder poll when notifications enabled
 
 STOP.

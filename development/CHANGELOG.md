@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Fixed (Remote Whisper · D23)
+
+- Production speech uses remote Groq Whisper (`WHISPER_BACKEND=remote`) — no local torch/whisper on Beget.
+- Deploy upserts Whisper remote env on every release.
+
+### Changed (Plans + reminders · D24)
+
+- Day dock: create plan, expand checklist, toggle/add items, delete plan; plans drawn on day timeline.
+- Browser notifications poll due reminders while the tab is open.
+
 ### Changed (Week nav + every-N-days · D22)
 
 - Week view ←/→ (and keyboard) moves by one week.

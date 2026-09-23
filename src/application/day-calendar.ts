@@ -272,7 +272,7 @@ export function dateKey(value: string | Date, timezone: string): string {
   return `${parts.year}-${parts.month}-${parts.day}`
 }
 
-export function eventHour(event: Event): number {
+export function eventHour(event: Pick<Event, 'startAt' | 'timezone'>): number {
   const hour = new Intl.DateTimeFormat('en-US', {
     timeZone: event.timezone,
     hour: '2-digit',

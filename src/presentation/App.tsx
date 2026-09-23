@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Event, Weekday } from '../domain/models'
+import type { Event, Plan, Weekday } from '../domain/models'
 import {
   dateKey,
   eventHour,
@@ -18,8 +18,7 @@ import type { TasksService } from '../application/tasks'
 import type { LocalListsService } from '../application/lists'
 import type { LocalCategoriesService } from '../application/categories'
 import { searchEntities, filterEventsByCategory } from '../application/categories'
-import type { LocalRemindersService } from '../application/reminders'
-import { REMINDER_OFFSETS_MINUTES } from '../application/reminders'
+import { dueReminders, REMINDER_OFFSETS_MINUTES, type LocalRemindersService } from '../application/reminders'
 import { collectTrash, restoreEntity, type TrashEntry } from '../application/trash'
 import type { Repositories } from '../application/repositories'
 import { exportBackup, importBackupReplace } from '../application/backup'
@@ -127,6 +126,7 @@ export function App({
   const [selectedDate, setSelectedDate] = useState(() => dateKey(now(), calendar.calendar.timezone))
   const [view, setView] = useState<CalendarView>('day')
   const [events, setEvents] = useState<Event[]>([])
+  const [dayPlans, setDayPlans] = useState<Plan[]>([])
   const [draft, setDraft] = useState<EventDraft | undefined>()
   const [editing, setEditing] = useState<Event | undefined>()
   const [dragged, setDragged] = useState<Event | undefined>()
@@ -162,8 +162,46 @@ export function App({
   const refresh = async () => {
     const listed = await calendar.listEvents(selectedDate)
     setEvents(filterEventsByCategory(listed, categoryFilter))
+    const plans = await services.plans.listPlansInRange(selectedDate, selectedDate)
+    setDayPlans(plans)
     setBoardRevision((value) => value + 1)
   }
+
+  useEffect(() => {
+    if (!notificationsEnabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    const fired = new Set<string>()
+    const tick = async () => {
+      const nowIso = now().toISOString()
+      const day = dateKey(now(), calendar.calendar.timezone)
+      const [todayEvents, reminders] = await Promise.all([
+        calendar.listEventsInRange(day, day),
+        services.repositories.reminders.list(),
+      ])
+      const byEvent = new Map(todayEvents.map((event) => [event.id.split('::')[0]!, event]))
+      const due = dueReminders(
+        reminders.flatMap((reminder) => {
+          const event = byEvent.get(reminder.eventId)
+          if (!event) return []
+          return [{ reminder, occurrenceStartAt: event.startAt }]
+        }),
+        nowIso,
+        2,
+      )
+      for (const reminder of due) {
+        if (fired.has(reminder.id)) continue
+        fired.add(reminder.id)
+        const event = byEvent.get(reminder.eventId)
+        try {
+          new Notification(event?.title ?? 'Напоминание', {
+            body: `Скоро: ${event?.title ?? 'событие'}`,
+          })
+        } catch { /* ignore */ }
+      }
+    }
+    void tick()
+    const timer = window.setInterval(() => { void tick() }, 30_000)
+    return () => window.clearInterval(timer)
+  }, [notificationsEnabled, calendar, services.repositories.reminders, now])
 
   const createAt = (date: string, hour: number) => {
     const start = zonedInputToIso(`${date}T${String(hour).padStart(2, '0')}:00`, calendar.calendar.timezone)
@@ -182,8 +220,11 @@ export function App({
     void calendar.listEvents(selectedDate).then((nextEvents) => {
       if (!cancelled) setEvents(filterEventsByCategory(nextEvents, categoryFilter))
     })
+    void services.plans.listPlansInRange(selectedDate, selectedDate).then((plans) => {
+      if (!cancelled) setDayPlans(plans)
+    })
     return () => { cancelled = true }
-  }, [calendar, selectedDate, categoryFilter])
+  }, [calendar, selectedDate, categoryFilter, services.plans, boardRevision])
 
   useEffect(() => {
     if (view !== 'day' || section !== 'calendar') return
@@ -290,12 +331,17 @@ export function App({
   const nowMinute = minuteInTimezone(now(), calendar.calendar.timezone)
   const showNowLine = view === 'day' && selectedDate === todayKey
   const dayVisibleHours = useMemo(() => {
-    const forced = events.flatMap((event) =>
-      occupiedHours(event.startAt, event.endAt, event.timezone || calendar.calendar.timezone),
-    )
+    const forced = [
+      ...events.flatMap((event) =>
+        occupiedHours(event.startAt, event.endAt, event.timezone || calendar.calendar.timezone),
+      ),
+      ...dayPlans.flatMap((plan) =>
+        occupiedHours(plan.startAt, plan.endAt, plan.timezone || calendar.calendar.timezone),
+      ),
+    ]
     if (showNowLine) forced.push(nowHour)
     return buildVisibleHours(visibleHoursPref, forced)
-  }, [events, calendar.calendar.timezone, visibleHoursPref, showNowLine, nowHour])
+  }, [events, dayPlans, calendar.calendar.timezone, visibleHoursPref, showNowLine, nowHour])
 
   const applyScope = async (scope: EditScope | DeleteScope) => {
     if (pendingScope === undefined) return
@@ -460,6 +506,22 @@ export function App({
                 />
               )}
               <div className="events-layer" style={{ height: `${dayVisibleHours.length * HOUR_ROW_PX}px` }}>
+                {dayPlans.map((plan) => {
+                  const duration = Math.max(56, (Date.parse(plan.endAt) - Date.parse(plan.startAt)) / 60_000 * HOUR_ROW_PX / 60)
+                  return (
+                    <article
+                      key={`plan-${plan.id}`}
+                      className="event-block plan-on-day"
+                      style={{
+                        top: `${displayOffsetPx(dayVisibleHours, eventHour(plan))}px`,
+                        height: `${duration}px`,
+                        ['--event-bg' as string]: plan.color,
+                      }}
+                    >
+                      <strong>План · {plan.title}</strong>
+                    </article>
+                  )
+                })}
                 {events.map((event) => (
                   <EventBlock
                     event={event}
@@ -500,7 +562,7 @@ export function App({
             <details className="calendar-dock">
               <summary>Планы и задачи на день</summary>
               <div className="dock-body">
-                <PlansPanel services={services} selectedDate={selectedDate} />
+                <PlansPanel services={services} selectedDate={selectedDate} boardRevision={boardRevision} onChanged={() => void refresh()} />
                 <TodayTasksPanel services={services} selectedDate={selectedDate} boardRevision={boardRevision} />
               </div>
             </details>
@@ -938,24 +1000,130 @@ function TodayTasksPanel({ services, selectedDate, boardRevision = 0 }: { servic
   )
 }
 
-function PlansPanel({ services, selectedDate }: { services: AppServices; selectedDate: string }) {
+function PlansPanel({
+  services,
+  selectedDate,
+  boardRevision = 0,
+  onChanged,
+}: {
+  services: AppServices
+  selectedDate: string
+  boardRevision?: number
+  onChanged?: () => void
+}) {
+  const timezone = services.calendar.calendar.timezone
   const [plans, setPlans] = useState<Awaited<ReturnType<PlansService['listPlansInRange']>>>([])
   const [progress, setProgress] = useState<Record<string, { completed: number; total: number; percentage: number }>>({})
-  useEffect(() => {
-    void services.plans.listPlansInRange(selectedDate, selectedDate).then(async (items) => {
-      setPlans(items)
-      const next: Record<string, { completed: number; total: number; percentage: number }> = {}
-      for (const plan of items) next[plan.id] = await services.plans.progress(plan.id)
-      setProgress(next)
-    })
-  }, [services.plans, selectedDate])
+  const [tasksByPlan, setTasksByPlan] = useState<Record<string, Awaited<ReturnType<PlansService['listTasks']>>>>({})
+  const [expanded, setExpanded] = useState<string | undefined>()
+  const [title, setTitle] = useState('')
+  const [startHour, setStartHour] = useState('10')
+  const [newTask, setNewTask] = useState('')
+
+  const reload = async () => {
+    const items = await services.plans.listPlansInRange(selectedDate, selectedDate)
+    setPlans(items)
+    const nextProgress: Record<string, { completed: number; total: number; percentage: number }> = {}
+    const nextTasks: Record<string, Awaited<ReturnType<PlansService['listTasks']>>> = {}
+    for (const plan of items) {
+      nextProgress[plan.id] = await services.plans.progress(plan.id)
+      nextTasks[plan.id] = await services.plans.listTasks(plan.id)
+    }
+    setProgress(nextProgress)
+    setTasksByPlan(nextTasks)
+  }
+
+  useEffect(() => { void reload() }, [services.plans, selectedDate, boardRevision])
+
+  const createPlan = async () => {
+    if (title.trim() === '') return
+    const hour = String(Math.min(23, Math.max(0, Number(startHour) || 10))).padStart(2, '0')
+    const start = zonedInputToIso(`${selectedDate}T${hour}:00`, timezone)
+    const end = new Date(Date.parse(start) + 60 * 60 * 1000).toISOString()
+    await services.plans.createPlan({ title: title.trim(), startAt: start, endAt: end, color: DEFAULT_COLOR })
+    setTitle('')
+    await reload()
+    onChanged?.()
+  }
+
   return (
-      <section className="side-panel" aria-label="Планы">
+    <section className="side-panel" aria-label="Планы">
       <h2>Планы</h2>
+      <div className="composer-row">
+        <label>
+          Название плана
+          <input aria-label="Название плана" value={title} onChange={(event) => setTitle(event.target.value)} />
+        </label>
+        <label>
+          Час
+          <input aria-label="Час начала плана" type="number" min={0} max={23} value={startHour} onChange={(event) => setStartHour(event.target.value)} />
+        </label>
+        <button type="button" className="btn btn-primary" onClick={() => void createPlan()}>Добавить план</button>
+      </div>
       {plans.length === 0 ? <p className="empty-state">Нет планов на эту дату</p> : plans.map((plan) => (
         <article key={plan.id} className="plan-block" style={{ borderColor: plan.color }}>
-          <strong>{plan.title}</strong>
-          <p>{progress[plan.id]?.completed ?? 0}/{progress[plan.id]?.total ?? 0} · {progress[plan.id]?.percentage ?? 0}%</p>
+          <button type="button" className="plan-block-toggle" onClick={() => setExpanded((id) => id === plan.id ? undefined : plan.id)}>
+            <strong>{plan.title}</strong>
+            <span>{progress[plan.id]?.completed ?? 0}/{progress[plan.id]?.total ?? 0} · {progress[plan.id]?.percentage ?? 0}%</span>
+          </button>
+          {expanded === plan.id && (
+            <div className="plan-checklist">
+              <ul>
+                {(tasksByPlan[plan.id] ?? []).map((task) => (
+                  <li key={task.id}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={task.completed}
+                        onChange={() => {
+                          void services.plans.toggleTask(task.id).then(async () => {
+                            await reload()
+                            onChanged?.()
+                          })
+                        }}
+                      />
+                      {task.title}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <div className="composer-row">
+                <input
+                  aria-label={`Новая задача плана ${plan.title}`}
+                  value={expanded === plan.id ? newTask : ''}
+                  onChange={(event) => setNewTask(event.target.value)}
+                  placeholder="Пункт чек-листа"
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    if (newTask.trim() === '') return
+                    void services.plans.addTask(plan.id, newTask.trim()).then(async () => {
+                      setNewTask('')
+                      await reload()
+                      onChanged?.()
+                    })
+                  }}
+                >
+                  +
+                </button>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  if (!window.confirm('Удалить план?')) return
+                  void services.plans.deletePlan(plan.id).then(async () => {
+                    await reload()
+                    onChanged?.()
+                  })
+                }}
+              >
+                Удалить план
+              </button>
+            </div>
+          )}
         </article>
       ))}
     </section>
@@ -1415,7 +1583,7 @@ function SettingsSection({
           <input type="checkbox" checked={notificationsEnabled} onChange={(event) => void onNotifications(event.target.checked)} />
           Уведомления браузера
         </label>
-        <p className="hint">Доставка напоминаний в обычной вкладке не гарантируется (нужно разрешение и открытая вкладка).</p>
+        <p className="hint">Работают только при открытой вкладке и разрешении браузера (раз в ~30 сек проверяем ближайшие события).</p>
       </div>
 
       <div className="settings-block">

@@ -266,6 +266,15 @@ select:focus-visible {
 
 .event-block strong { display: block; padding-right: 8px; }
 
+.event-block.plan-on-day {
+  opacity: 0.92;
+  border-style: dashed;
+}
+
+.event-block.plan-on-day strong {
+  font-weight: 600;
+}
+
 .event-block-actions {
   display: none;
   gap: 6px;

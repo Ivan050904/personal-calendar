@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     ai_model: str = ""
     ai_provider: str = "mock"
     whisper_model: str = "small"
+    whisper_backend: str = "auto"  # auto | local | remote
+    whisper_api_base_url: str = ""
+    whisper_api_key: str = ""
+    whisper_remote_model: str = "whisper-large-v3-turbo"
     groq_api_key: str = ""
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_model: str = "openai/gpt-oss-20b"
