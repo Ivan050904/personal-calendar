@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     auth_password: str = ""
     auth_session_secret: str = ""
 
+    # Folio-One SSO (JWT from petrushka87 / Folio login)
+    folio_jwt_secret: str = ""
+    folio_jwt_algorithm: str = "HS256"
+    folio_sso_emails: str = "petr@petr.local"
+    folio_sso_user_ids: str = ""
+    folio_sso_redirect: str = "/"
+    # Server-to-server token for Folio backend agenda proxy
+    folio_service_token: str = ""
+
     ai_api_key: str = ""
     ai_base_url: str = ""
     ai_model: str = ""

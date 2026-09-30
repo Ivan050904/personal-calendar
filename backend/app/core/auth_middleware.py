@@ -13,8 +13,41 @@ def _is_public_path(path: str) -> bool:
     normalized = path.rstrip("/") or "/"
     return any(
         normalized.endswith(suffix)
-        for suffix in ("/health", "/auth/login", "/auth/me", "/auth/logout", "/docs", "/openapi.json", "/redoc")
+        for suffix in (
+            "/health",
+            "/auth/login",
+            "/auth/me",
+            "/auth/logout",
+            "/auth/sso",
+            "/docs",
+            "/openapi.json",
+            "/redoc",
+        )
     )
+
+
+def _service_token_ok(request: Request, settings) -> bool:
+    expected = (settings.folio_service_token or "").strip()
+    if not expected:
+        return False
+    header = request.headers.get("Authorization", "")
+    if header.lower().startswith("bearer "):
+        provided = header[7:].strip()
+        if provided and hmac_compare(provided, expected):
+            return True
+    provided = request.headers.get("X-Folio-Service-Token", "").strip()
+    return bool(provided) and hmac_compare(provided, expected)
+
+
+def hmac_compare(left: str, right: str) -> bool:
+    import secrets
+
+    a = left.encode("utf-8")
+    b = right.encode("utf-8")
+    if len(a) != len(b):
+        secrets.compare_digest(b, b)
+        return False
+    return secrets.compare_digest(a, b)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -24,6 +57,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if request.method == "OPTIONS" or _is_public_path(request.url.path):
+            return await call_next(request)
+
+        if _service_token_ok(request, settings):
+            request.state.username = settings.auth_username
+            request.state.folio_service = True
             return await call_next(request)
 
         username = read_session_username(
