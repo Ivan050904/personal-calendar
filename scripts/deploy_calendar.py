@@ -30,7 +30,7 @@ CERTBOT_EMAIL = "admin@folio-one.ru"
 MARKER = f"# Personal Calendar ({DOMAIN})"
 
 # Folio AI proxy (NL). Beget cannot call api.groq.com directly (403 Forbidden).
-WHISPER_PROXY_BASE = "http://91.186.214.4:8787/groq/v1"
+WHISPER_PROXY_BASE = "http://132.243.21.116:8787/groq/v1"
 WHISPER_PROXY_MODEL = "whisper-large-v3-turbo"
 
 ROOT = Path(__file__).resolve().parents[1]
