@@ -19,6 +19,7 @@ def _is_public_path(path: str) -> bool:
             "/auth/me",
             "/auth/logout",
             "/auth/sso",
+            "/auth/folio",
             "/docs",
             "/openapi.json",
             "/redoc",
@@ -57,6 +58,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if request.method == "OPTIONS" or _is_public_path(request.url.path):
+            return await call_next(request)
+
+        if "/integration/v1" in request.url.path:
             return await call_next(request)
 
         if _service_token_ok(request, settings):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -96,5 +97,45 @@ def folio_sso(request: Request) -> Response:
     session = issue_session_token(username=settings.auth_username, secret=settings.auth_session_secret)
     redirect_to = settings.folio_sso_redirect.strip() or "/"
     response = RedirectResponse(url=redirect_to, status_code=302)
+    set_session_cookie(response, session, secure=settings.app_env == "production")
+    return response
+
+
+def _launch_target(value: object) -> str:
+    if not isinstance(value, str) or not value.startswith("/") or value.startswith("//") or "\\" in value:
+        return "/"
+    return value
+
+
+@router.get("/folio")
+def folio_launch(request: Request) -> Response:
+    """Exchange a one-time Folio launch code and open the shared calendar."""
+    settings = get_settings()
+    if not auth_configured(settings.auth_username, settings.auth_password, settings.auth_session_secret):
+        raise AppError("validation_error", "Auth is not configured on the server", status_code=503)
+    if not settings.folio_exchange_base_url.strip() or not settings.folio_exchange_secret.strip():
+        raise AppError("validation_error", "Launch exchange is not configured", status_code=503)
+    code = request.query_params.get("code", "").strip()
+    if not code:
+        raise AppError("unauthorized", "Launch code is required", status_code=401)
+    try:
+        exchanged = httpx.post(
+            settings.folio_exchange_base_url.rstrip("/") + "/calendar/sso/exchange",
+            json={"code": code},
+            headers={
+                "X-Calendar-Client-Id": settings.folio_server_client_id,
+                "X-Calendar-Exchange-Secret": settings.folio_exchange_secret,
+            },
+            timeout=10,
+        )
+    except httpx.HTTPError as exc:
+        raise AppError("unavailable", "Launch exchange unavailable", status_code=503) from exc
+    if exchanged.status_code != 200:
+        raise AppError("unauthorized", "Invalid or consumed launch code", status_code=401)
+    body = exchanged.json()
+    if not isinstance(body, dict) or not body.get("folio_user_id"):
+        raise AppError("unauthorized", "Invalid exchange response", status_code=401)
+    session = issue_session_token(username=settings.auth_username, secret=settings.auth_session_secret)
+    response = RedirectResponse(url=_launch_target(body.get("target")), status_code=302)
     set_session_cookie(response, session, secure=settings.app_env == "production")
     return response

@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     folio_sso_redirect: str = "/"
     # Server-to-server token for Folio backend agenda proxy
     folio_service_token: str = ""
+    calendar_bridge_secret: str = ""
+    folio_exchange_base_url: str = ""
+    folio_exchange_secret: str = ""
+    folio_server_client_id: str = "personal-calendar"
 
     ai_api_key: str = ""
     ai_base_url: str = ""
