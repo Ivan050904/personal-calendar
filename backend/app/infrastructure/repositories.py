@@ -112,10 +112,10 @@ class CalendarRepository(SqlEntityRepository[m.CalendarModel]):
         def created_key(item: dict[str, Any]) -> str:
             return str(item.get("createdAt") or item.get("id") or "")
 
-        # Prefer the newest seeded Personal Calendar; otherwise earliest for stability.
+        # The original calendar stays the site calendar. Later Folio accounts get their own.
         personal = [item for item in items if str(item.get("name") or "") == "Personal Calendar"]
         if personal:
-            personal.sort(key=created_key, reverse=True)
+            personal.sort(key=created_key)
             return personal[0]
         items.sort(key=created_key)
         return items[0]
@@ -130,11 +130,18 @@ class CalendarRepository(SqlEntityRepository[m.CalendarModel]):
             "deletedAt": _iso(row.deleted_at),
         }
 
+    def apply_dict(self, row: m.CalendarModel, entity: dict[str, Any]) -> None:
+        kept_owner = row.folio_user_id
+        super().apply_dict(row, entity)
+        if "folioUserId" not in entity:
+            row.folio_user_id = kept_owner
+
     def from_dict(self, entity: dict[str, Any]) -> m.CalendarModel:
         return m.CalendarModel(
             id=entity["id"],
             name=entity["name"],
             timezone=entity["timezone"],
+            folio_user_id=entity.get("folioUserId"),
             created_at=_parse_dt(entity["createdAt"]) or datetime.utcnow(),
             updated_at=_parse_dt(entity["updatedAt"]) or datetime.utcnow(),
             deleted_at=_parse_dt(entity.get("deletedAt")),

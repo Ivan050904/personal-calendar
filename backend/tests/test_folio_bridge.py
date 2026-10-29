@@ -17,7 +17,7 @@ def _b64(value: dict) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-def bridge_token(*scopes: str) -> str:
+def bridge_token(*scopes: str, sub: str = "11111111-1111-1111-1111-111111111111") -> str:
     now = int(time.time())
     header = _b64({"alg": "HS256", "typ": "JWT"})
     payload = _b64(
@@ -25,13 +25,13 @@ def bridge_token(*scopes: str) -> str:
             "iss": "folio",
             "aud": "personal-calendar",
             "purpose": "calendar_bridge",
-            "sub": "11111111-1111-1111-1111-111111111111",
+            "sub": sub,
             "connection_id": "22222222-2222-2222-2222-222222222222",
             "scopes": list(scopes),
             "iat": now,
             "nbf": now,
             "exp": now + 60,
-            "jti": "jti-test",
+            "jti": f"jti-{sub}",
         }
     )
     signature = hmac.new(SECRET.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest()
@@ -114,3 +114,22 @@ def test_bridge_connect_status_and_agenda(client):
 
     denied = client.get("/api/integration/v1/status")
     assert denied.status_code == 401
+
+    other = "33333333-3333-3333-3333-333333333333"
+    other_headers = {"Authorization": f"Bearer {bridge_token('calendar:connect', 'calendar:read', sub=other)}"}
+    other_calendar = client.post(
+        "/api/integration/v1/connect",
+        json={"timezone": "Asia/Vladivostok"},
+        headers=other_headers,
+    )
+    assert other_calendar.status_code == 200, other_calendar.text
+    assert other_calendar.json()["id"] != calendar["id"]
+    assert other_calendar.json()["owner_id"] == other
+    other_agenda = client.get(
+        "/api/integration/v1/agenda",
+        params={"from": "2026-10-30", "to": "2026-10-30", "timezone": "Asia/Vladivostok"},
+        headers=other_headers,
+    )
+    assert other_agenda.status_code == 200, other_agenda.text
+    assert other_agenda.json()["items"] == []
+    assert other_agenda.json()["overdue_tasks"] == []

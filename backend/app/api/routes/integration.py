@@ -7,13 +7,12 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.application.entity_service import EntityService
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.folio_bridge import (
     build_agenda,
-    calendar_payload,
-    ensure_local_calendar,
+    calendar_for_user,
+    ensure_user_calendar,
     require_scope,
     verify_bridge_token,
 )
@@ -34,18 +33,15 @@ def bridge_claims(request: Request) -> dict[str, Any]:
     return verify_bridge_token(header[7:].strip(), settings.calendar_bridge_secret)
 
 
-def _calendar_or_404(db: Session) -> dict[str, Any]:
-    current = EntityService(db).get_local_calendar()
-    if current is None:
-        raise AppError("calendar_not_found", "Connect calendar first", status_code=404)
-    return calendar_payload(current)
+def _calendar_or_404(db: Session, folio_user_id: str) -> dict[str, Any]:
+    return calendar_for_user(db, folio_user_id)
 
 
 @router.post("/connect")
 def connect(body: ConnectBody, request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
     claims = bridge_claims(request)
     require_scope(claims, "calendar:connect")
-    return ensure_local_calendar(db, body.timezone)
+    return ensure_user_calendar(db, claims["sub"], body.timezone)
 
 
 @router.get("/status")
@@ -54,7 +50,7 @@ def status(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
     require_scope(claims, "calendar:read")
     return {
         "contract_version": 2,
-        "calendar": _calendar_or_404(db),
+        "calendar": _calendar_or_404(db, claims["sub"]),
         "capabilities": {"read": True, "write": False, "history": False, "reminders": False},
     }
 
@@ -69,5 +65,5 @@ def agenda(
 ) -> dict[str, Any]:
     claims = bridge_claims(request)
     require_scope(claims, "calendar:read")
-    calendar = _calendar_or_404(db)
+    calendar = _calendar_or_404(db, claims["sub"])
     return build_agenda(db, calendar, from_day, to_day, timezone)

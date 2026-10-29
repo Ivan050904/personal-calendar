@@ -1,4 +1,4 @@
-"""Folio calendar bridge (contract v2) over the single local calendar."""
+"""Folio calendar bridge (contract v2). Each Folio account has its own calendar."""
 
 from __future__ import annotations
 
@@ -11,10 +11,12 @@ from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.application.entity_service import EntityService
 from app.core.errors import AppError
+from app.infrastructure.db.models import CalendarModel
 
 SCOPES = frozenset(
     {
@@ -25,7 +27,6 @@ SCOPES = frozenset(
         "calendar:reminders",
     }
 )
-OWNER_ID = "local"
 
 
 def _b64decode(value: str) -> bytes:
@@ -107,12 +108,12 @@ def _stamp(value: str | None) -> str:
     return parsed.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def calendar_payload(row: dict[str, Any]) -> dict[str, Any]:
+def calendar_payload(row: dict[str, Any], owner_id: str) -> dict[str, Any]:
     _zone(str(row.get("timezone") or ""))
     return {
         "id": row["id"],
         "name": row.get("name") or "Personal Calendar",
-        "owner_id": OWNER_ID,
+        "owner_id": owner_id,
         "timezone": row["timezone"],
         "revision": 1,
         "created_at": _stamp(row.get("createdAt")),
@@ -120,24 +121,64 @@ def calendar_payload(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def ensure_local_calendar(db: Session, timezone_name: str) -> dict[str, Any]:
-    _zone(timezone_name)
-    service = EntityService(db)
-    current = service.get_local_calendar()
-    if current is not None:
-        return calendar_payload(current)
-    now = _stamp(None)
-    created = service.put_entity(
-        "calendars",
-        {
-            "id": str(uuid4()),
-            "name": "Personal Calendar",
-            "timezone": timezone_name,
-            "createdAt": now,
-            "updatedAt": now,
-        },
+def _owned_row(db: Session, folio_user_id: str) -> CalendarModel | None:
+    from sqlalchemy import select
+
+    return db.scalar(
+        select(CalendarModel).where(
+            CalendarModel.folio_user_id == folio_user_id,
+            CalendarModel.deleted_at.is_(None),
+        )
     )
-    return calendar_payload(created)
+
+
+def _payload_for_row(row: CalendarModel) -> dict[str, Any]:
+    return calendar_payload(
+        {
+            "id": row.id,
+            "name": row.name,
+            "timezone": row.timezone,
+            "createdAt": _stamp(row.created_at.replace(tzinfo=UTC).isoformat() if row.created_at else None),
+            "updatedAt": _stamp(row.updated_at.replace(tzinfo=UTC).isoformat() if row.updated_at else None),
+        },
+        row.folio_user_id or "",
+    )
+
+
+def calendar_for_user(db: Session, folio_user_id: str) -> dict[str, Any]:
+    row = _owned_row(db, folio_user_id)
+    if row is None:
+        raise AppError("calendar_not_found", "Connect calendar first", status_code=404)
+    return _payload_for_row(row)
+
+
+def ensure_user_calendar(db: Session, folio_user_id: str, timezone_name: str) -> dict[str, Any]:
+    _zone(timezone_name)
+    if not folio_user_id.strip():
+        raise AppError("unauthorized", "Invalid bridge credential", status_code=401)
+    existing = _owned_row(db, folio_user_id)
+    if existing is not None:
+        return _payload_for_row(existing)
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+    row = CalendarModel(
+        id=str(uuid4()),
+        name="Personal Calendar",
+        timezone=timezone_name,
+        folio_user_id=folio_user_id,
+        created_at=now,
+        updated_at=now,
+    )
+    try:
+        db.add(row)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = _owned_row(db, folio_user_id)
+        if existing is None:
+            raise
+        return _payload_for_row(existing)
+    db.refresh(row)
+    return _payload_for_row(row)
 
 
 def _occurrence(
