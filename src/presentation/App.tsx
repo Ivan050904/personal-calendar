@@ -19,7 +19,7 @@ import { resolveCalendarTarget } from '../application/calendar-deep-link'
 import { exactOccurrence } from '../infrastructure/calendar-occurrence-api'
 import { occurrenceEvent } from '../infrastructure/api-calendar-services'
 import { shouldUseApiRepository } from '../infrastructure/api-repositories'
-import { createCalendar, deleteCalendar, listCalendars, patchCalendar, setOverlayCalendars, type CalendarV2 } from '../infrastructure/calendars-api'
+import { createCalendar, deleteCalendar, listCalendars, listGrants, patchCalendar, revokeGrant, setOverlayCalendars, type AppGrant, type CalendarV2 } from '../infrastructure/calendars-api'
 import type { PlansService } from '../application/plans'
 import type { TasksService } from '../application/tasks'
 import type { LocalListsService } from '../application/lists'
@@ -2077,6 +2077,55 @@ function CalendarsSettings({ calendars, onChanged }: { calendars: CalendarV2[]; 
   )
 }
 
+const SCOPE_LABELS: Record<string, string> = {
+  openid: 'аккаунт', profile: 'логин и имя', 'calendars.read': 'список календарей',
+  'events.read': 'чтение событий', 'events.write': 'запись в свой календарь',
+}
+
+function ConnectedApps({ calendars }: { calendars: CalendarV2[] }) {
+  const [grants, setGrants] = useState<AppGrant[] | undefined>()
+  const [error, setError] = useState<string | undefined>()
+  useEffect(() => {
+    let active = true
+    void listGrants().then((items) => { if (active) setGrants(items) }).catch(() => { if (active) setGrants([]) })
+    return () => { active = false }
+  }, [])
+  const names = (ids: string[]) => ids.map((id) => calendars.find((c) => c.id === id)?.name).filter(Boolean).join(', ')
+  return (
+    <div className="settings-block">
+      <p className="settings-label">Подключённые приложения</p>
+      {grants !== undefined && grants.length === 0 && <p className="hint">Пока ни одно приложение не подключено.</p>}
+      <ul className="settings-category-list">
+        {(grants ?? []).map((grant) => (
+          <li key={grant.id}>
+            <div className="composer-row">
+              <span>
+                <b>{grant.client_name}</b>
+                <span className="hint"> — {grant.scopes.map((s) => SCOPE_LABELS[s] ?? s).join(', ')}
+                  {grant.readable_calendar_ids.length > 0 && `; видит: ${names(grant.readable_calendar_ids)}`}</span>
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  if (!window.confirm(`Отключить «${grant.client_name}»? Приложение потеряет доступ сразу.`)) return
+                  setError(undefined)
+                  void revokeGrant(grant.id)
+                    .then(() => setGrants((items) => (items ?? []).filter((item) => item.id !== grant.id)))
+                    .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Не удалось отключить'))
+                }}
+              >
+                Отключить
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {error !== undefined && <p className="login-error" role="alert">{error}</p>}
+    </div>
+  )
+}
+
 function SettingsSection({
   services, calendars, onCalendarsChanged, theme, onTheme, visibleHours, onVisibleHours, notificationsEnabled, onNotifications, onExport, onImport, onLogout,
 }: {
@@ -2112,6 +2161,7 @@ function SettingsSection({
       <h1>Настройки</h1>
 
       {calendars !== undefined && <CalendarsSettings calendars={calendars} onChanged={onCalendarsChanged} />}
+      {calendars !== undefined && <ConnectedApps calendars={calendars} />}
 
       <div className="settings-block">
         <p className="settings-label">Категории</p>

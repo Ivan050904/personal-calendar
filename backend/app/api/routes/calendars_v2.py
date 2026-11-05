@@ -26,7 +26,7 @@ class CalendarPatch(BaseModel):
 
 
 def reader(actor: CalendarActor = Depends(require_actor)) -> CalendarActor:
-    require_scope(actor, 'calendar:read')
+    require_scope(actor, 'calendars.read' if actor.client_id else 'calendar:read')
     return actor
 
 
@@ -37,7 +37,9 @@ def writer(actor: CalendarActor = Depends(require_actor)) -> CalendarActor:
 
 @router.get('')
 def index(db: Session = Depends(get_db), actor: CalendarActor = Depends(reader)):
-    return list_calendars(db, actor)
+    rows = list_calendars(db, actor)
+    # A connected app sees only what the user ticked on consent plus its own calendar (D36).
+    return [row for row in rows if row['id'] in actor.readable_calendar_ids] if actor.client_id else rows
 
 
 @router.post('', status_code=201)

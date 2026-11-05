@@ -62,6 +62,28 @@ def set_password(body: PasswordBody, db: Session = Depends(get_db),
     return {'ok': True}
 
 
+@router.get('/grants')
+def grants(db: Session = Depends(get_db), actor: CalendarActor = Depends(require_session_actor)):
+    from sqlalchemy import select
+    from app.application.oauth import grant_read
+    from app.infrastructure.db.models import OAuthGrantModel
+    rows = db.scalars(select(OAuthGrantModel).where(OAuthGrantModel.principal_id == actor.principal_id,
+                                                    OAuthGrantModel.revoked_at.is_(None)))
+    return [grant_read(db, row) for row in rows]
+
+
+@router.delete('/grants/{grant_id}')
+def revoke_grant(grant_id: str, db: Session = Depends(get_db), actor: CalendarActor = Depends(require_session_actor)):
+    from app.application.oauth import revoke_grant as revoke
+    from app.infrastructure.db.models import OAuthGrantModel
+    row = db.get(OAuthGrantModel, grant_id)
+    if row is None or row.principal_id != actor.principal_id or row.revoked_at is not None:
+        raise AppError('not_found', 'Connection not found', status_code=404)
+    revoke(db, row)
+    db.commit()
+    return {'id': grant_id, 'revoked': True}
+
+
 @router.post('/me/sessions/revoke-others')
 def revoke_other_sessions(db: Session = Depends(get_db), actor: CalendarActor = Depends(require_session_actor)):
     revoked = revoke_sessions(db, actor.principal_id, actor.session_id)

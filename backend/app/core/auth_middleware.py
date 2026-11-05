@@ -26,11 +26,25 @@ def _is_public_path(path: str) -> bool:
             "/auth/sso",
             "/auth/folio",
             "/v2/accounts",
+            "/oauth/authorize",
+            "/oauth/login",
+            "/oauth/token",
+            "/oauth/revoke",
+            "/.well-known/oauth-authorization-server",
             "/docs",
             "/openapi.json",
             "/redoc",
         )
     )
+
+
+def _app_may_call(method: str, path: str, api_prefix: str) -> bool:
+    """Connected apps (OAuth tokens, D35) reach only the app API; everything else is UI-only."""
+    rel = path[len(api_prefix):] if api_prefix and path.startswith(api_prefix + "/") else path
+    rel = rel.rstrip("/") or "/"
+    if rel == "/v2/calendars":
+        return method in {"GET", "HEAD"}
+    return rel == "/oauth/userinfo" or rel == "/v2/events" or rel.startswith("/v2/events/")
 
 
 def _service_token_ok(request: Request, settings) -> bool:
@@ -67,7 +81,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(status_code=403,content=error_body('forbidden','Invalid request origin'))
         header = request.headers.get("Authorization", "")
         try:
-            if header.lower().startswith("bearer "):
+            if header.lower().startswith("bearer ") and header[7:].strip().startswith("pca_"):
+                from app.application.oauth import actor_for_access_token
+                with SessionLocal() as db:
+                    actor = actor_for_access_token(db, header[7:].strip())
+            elif header.lower().startswith("bearer "):
                 actor = verify_bridge_actor(header[7:], settings, datetime.now(timezone.utc))
                 from app.infrastructure.db.models import CalendarPrincipalModel
                 with SessionLocal() as db:
@@ -79,6 +97,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     actor = read_actor_session(db, request.cookies.get(COOKIE_NAME))
         except AppError as exc:
             return JSONResponse(status_code=exc.status_code, content=error_body(exc.code, exc.message))
+        if actor and actor.client_id and not _app_may_call(request.method, request.url.path, settings.api_prefix):
+            return JSONResponse(status_code=403, content=error_body("forbidden", "Not available to connected apps"))
         if actor:
             request.state.actor = actor
             request.state.username = settings.auth_username if actor.folio_user_id is None else None

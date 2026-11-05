@@ -261,3 +261,52 @@ class CalendarChangeModel(Base):
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
     deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+# --- OAuth 2.0 for connected apps (D35, wave 3). Secrets, codes and tokens are stored only as SHA-256.
+
+class OAuthClientModel(Base):
+    __tablename__ = 'oauth_clients'
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    secret_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    client_type: Mapped[str] = mapped_column(String(16), nullable=False)  # confidential | public
+    redirect_uris: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    allowed_scopes: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
+
+
+class OAuthGrantModel(Base):
+    __tablename__ = 'oauth_grants'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    principal_id: Mapped[str] = mapped_column(String(64), ForeignKey('calendar_principals.id'), nullable=False, index=True)
+    client_id: Mapped[str] = mapped_column(String(64), ForeignKey('oauth_clients.id'), nullable=False, index=True)
+    scopes: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    readable_calendar_ids: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    app_calendar_id: Mapped[str | None] = mapped_column(String(64), ForeignKey('calendars.id'), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+
+
+class OAuthAuthorizationCodeModel(Base):
+    __tablename__ = 'oauth_authorization_codes'
+    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    grant_id: Mapped[str] = mapped_column(String(36), ForeignKey('oauth_grants.id'), nullable=False, index=True)
+    client_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    redirect_uri: Mapped[str] = mapped_column(String(2048), nullable=False)
+    code_challenge: Mapped[str] = mapped_column(String(128), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+
+
+class OAuthTokenModel(Base):
+    __tablename__ = 'oauth_tokens'
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    grant_id: Mapped[str] = mapped_column(String(36), ForeignKey('oauth_grants.id'), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)  # access | refresh
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    replaced_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)

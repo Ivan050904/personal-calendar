@@ -17,13 +17,13 @@
 2. **Кнопка «Подключить календарь».** На сервере Folio:
    - сгенерировать `state` и `code_verifier` (43–128 символов), сохранить их в сессии пользователя;
    - `code_challenge = BASE64URL(SHA256(code_verifier))`;
-   - редирект на `https://calendar.folio-one.ru/oauth/authorize?response_type=code&client_id=…&redirect_uri=…&scope=calendars.read events.read events.write&state=…&code_challenge=…&code_challenge_method=S256`.
-3. **Callback.** Проверить `state`. Затем серверный `POST https://calendar.folio-one.ru/oauth/token` с `grant_type=authorization_code`, `code`, `redirect_uri`, `client_id`, `client_secret`, `code_verifier`. Получить `access_token` (15 мин) и `refresh_token` (30 дней).
+   - редирект на `https://calendar.folio-one.ru/api/oauth/authorize?response_type=code&client_id=…&redirect_uri=…&scope=calendars.read events.read events.write&state=…&code_challenge=…&code_challenge_method=S256`.
+3. **Callback.** Проверить `state`. Затем серверный `POST https://calendar.folio-one.ru/api/oauth/token` с `grant_type=authorization_code`, `code`, `redirect_uri`, `client_id`, `client_secret`, `code_verifier`. Получить `access_token` (15 мин) и `refresh_token` (30 дней).
 4. **Хранение.** Новая таблица в Folio: пользователь Folio → `refresh_token` (зашифрованный или как минимум не логируемый), `access_token` + срок, выбранные scope, время подключения. На одного пользователя Folio — одно подключение.
-5. **Обновление токена.** Перед запросом, если `access_token` истёк: `POST /oauth/token` с `grant_type=refresh_token`. **Каждый раз сохранять новый refresh_token**: старый гаснет, а повторная попытка его использовать отзывает всё подключение. Два параллельных обновления для одного пользователя не допускать (блокировка на пользователя).
+5. **Обновление токена.** Перед запросом, если `access_token` истёк: `POST /api/oauth/token` с `grant_type=refresh_token`. **Каждый раз сохранять новый refresh_token**: старый гаснет, а повторная попытка его использовать отзывает всё подключение. Два параллельных обновления для одного пользователя не допускать (блокировка на пользователя).
 6. **Запросы.** Все обращения к календарю идут в `/api/v2/*` с `Authorization: Bearer <access_token>` вместо JWT-моста и вместо `CALENDAR_SERVICE_TOKEN`. Ответ `401` означает, что токен протух или подключение отозвано: один раз обновить токен, затем показать пользователю «Подключите календарь заново».
 7. **Свой календарь.** Folio пишет только в календарь приложения «Folio» (он создаётся сам при первом подключении). При создании событий передавать `external_id` (ID сущности в Folio) и `Idempotency-Key`. Чтобы видеть изменения, использовать `GET /api/v2/changes?cursor=…` и хранить курсор у себя. Свои же правки отсеиваются по `actor`.
-8. **Отключение.** Кнопка «Отключить календарь» в Folio вызывает `POST /oauth/revoke` и удаляет токены у себя. Пользователь может отключить Folio и со стороны календаря, тогда Folio получит `401` (см. п. 6).
+8. **Отключение.** Кнопка «Отключить календарь» в Folio вызывает `POST /api/oauth/revoke` и удаляет токены у себя. Пользователь может отключить Folio и со стороны календаря, тогда Folio получит `401` (см. п. 6).
 9. **Переходный период.** Пользователи, которые ещё не подключились по-новому, продолжают работать через старый мост. Новый путь включать под флагом. Когда у всех активных пользователей есть подключение, сообщить владельцу: календарь выключит мост и сервисный токен, после чего удалить старый код в Folio.
 
 ## Что НЕ делать

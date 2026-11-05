@@ -18,6 +18,11 @@ class CalendarActor:
     folio_user_id: str | None
     scopes: frozenset[str]
     session_id: str | None = None
+    # Connected app (OAuth access token, D35); None for the calendar UI and the Folio bridge.
+    client_id: str | None = None
+    grant_id: str | None = None
+    readable_calendar_ids: frozenset[str] = frozenset()
+    app_calendar_id: str | None = None
 
 
 def require_actor(request: Request) -> CalendarActor:

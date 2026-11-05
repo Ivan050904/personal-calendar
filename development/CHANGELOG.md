@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Calendar platform wave 3 — OAuth for apps and API v2 events (2026-11-05)
+
+- Hand-written OAuth 2.0 server (D35) under `/api/oauth/*`: authorize (login form + consent with calendar picker, CSRF, anti-framing), token (authorization_code with PKCE S256, refresh with rotation), revoke, userinfo, `/api/.well-known/oauth-authorization-server`. Tables `oauth_clients`, `oauth_grants`, `oauth_authorization_codes`, `oauth_tokens` (Alembic `f60718293a41`); all secrets stored as SHA-256.
+- Code replay or rotated-refresh reuse revokes the whole grant; token endpoint rate-limited.
+- Consenting with `events.write` creates the app's own calendar (`kind=app`); reconnecting after a revoke reuses it unless the user deleted it.
+- `/api/v2/events` list/get/create/patch/delete (`If-Match` revision, `Idempotency-Key`). Apps read only ticked calendars and write only into their own; app tokens are refused everywhere except `/api/v2/calendars` (GET), `/api/v2/events*` and `/api/oauth/userinfo`.
+- `/api/v2/grants` list/revoke; Settings → «Подключённые приложения» with «Отключить».
+- Owner script `backend/scripts/oauth_clients.py` (create/list/disable).
+- Verified:
+  - backend 161 passed and 1 real-AI skip (40 new OAuth tests); a mutation check on PKCE, refresh reuse, the app allowlist and calendar reuse turns the tests red;
+  - frontend 87 passed; tsc and build ok; lint 0 errors (4 existing warnings);
+  - in the browser on a temporary SQLite API: the consent page, Allow → redirect with code and state, the app server exchanges the code, sees only the ticked calendar, its lesson shows on the board, it is refused `/api/v2/me`, and a code replay gives `invalid_grant`; Settings lists the app.
+- Not run: the MySQL/MariaDB migration (no local MySQL). The post-wave security review has not been run.
+
 ### Calendar platform wave 2 — several calendars (2026-11-05)
 
 - `calendars` gets `kind` (personal/user/app), `source_client_id`, `color`, `visible`, `sort_order`; Alembic `e5f607182930` marks each owner's default calendar `personal` (verified on SQLite with data, plus downgrade/upgrade).

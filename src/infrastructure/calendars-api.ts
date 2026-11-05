@@ -19,6 +19,18 @@ export function deleteCalendar(id: string): Promise<{ id: string; deleted: boole
   return calendarTransport(`/api/v2/calendars/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
+/** An app the user connected via OAuth (D35). */
+export interface AppGrant {
+  id: string; client_id: string; client_name: string; scopes: string[]; readable_calendar_ids: string[]
+  app_calendar_id: string | null; created_at: string; last_used_at: string | null
+}
+export function listGrants(): Promise<AppGrant[]> {
+  return calendarTransport('/api/v2/grants')
+}
+export function revokeGrant(id: string): Promise<{ id: string; revoked: boolean }> {
+  return calendarTransport(`/api/v2/grants/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
 /**
  * Calendars the board overlays. Empty until App loads the list; then readers
  * fall back to the primary calendar only, which is the pre-D36 behaviour.
