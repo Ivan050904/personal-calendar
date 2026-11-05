@@ -21,6 +21,5 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_index('ix_event_attendees_principal_id', table_name='event_attendees')
-    op.drop_index('ix_event_attendees_event_id', table_name='event_attendees')
+    # The table's indexes go with it (MySQL/MariaDB refuse to drop an index a foreign key uses).
     op.drop_table('event_attendees')

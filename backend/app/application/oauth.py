@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.calendar_actor import CalendarActor
@@ -188,17 +189,29 @@ def _issue_tokens(db: Session, grant: m.OAuthGrantModel) -> tuple[dict, str]:
     return body, digest(refresh)
 
 
+def _claim(db: Session, statement) -> bool:
+    """One conditional UPDATE; False when another request got there first.
+
+    MariaDB 11.6+ (snapshot isolation) reports that case as error 1020 instead of updating 0 rows."""
+    try:
+        return db.execute(statement).rowcount == 1
+    except OperationalError as exc:
+        if getattr(exc.orig, "args", (None,))[0] != 1020:
+            raise
+        db.rollback()
+        return False
+
+
 def exchange_code(db: Session, client: m.OAuthClientModel, code: str, redirect_uri: str, verifier: str) -> dict:
     row = db.get(m.OAuthAuthorizationCodeModel, digest(code or ""))
     if row is None or row.client_id != client.id:
         raise OAuthError("invalid_grant", "Invalid authorization code")
     grant = db.get(m.OAuthGrantModel, row.grant_id)
     # Claim the code in one conditional UPDATE, so two concurrent requests cannot both redeem it.
-    claimed = db.execute(update(m.OAuthAuthorizationCodeModel)
-                         .where(m.OAuthAuthorizationCodeModel.code_hash == row.code_hash,
-                                m.OAuthAuthorizationCodeModel.used_at.is_(None))
-                         .values(used_at=datetime.utcnow())).rowcount
-    if claimed != 1:
+    if not _claim(db, update(m.OAuthAuthorizationCodeModel)
+                  .where(m.OAuthAuthorizationCodeModel.code_hash == row.code_hash,
+                         m.OAuthAuthorizationCodeModel.used_at.is_(None))
+                  .values(used_at=datetime.utcnow())):
         # Replayed code: everything issued under this grant is suspect.
         revoke_grant(db, grant)
         raise OAuthError("invalid_grant", "Authorization code already used")
@@ -226,10 +239,9 @@ def refresh(db: Session, client: m.OAuthClientModel, refresh_token: str) -> dict
     if row.expires_at <= datetime.utcnow() or grant.revoked_at is not None:
         raise OAuthError("invalid_grant", "Invalid refresh token")
     # Claim the refresh token in one conditional UPDATE; the loser of a concurrent race is a reuse.
-    claimed = db.execute(update(m.OAuthTokenModel)
-                         .where(m.OAuthTokenModel.token_hash == row.token_hash, m.OAuthTokenModel.revoked_at.is_(None))
-                         .values(revoked_at=datetime.utcnow())).rowcount
-    if claimed != 1:
+    if not _claim(db, update(m.OAuthTokenModel)
+                  .where(m.OAuthTokenModel.token_hash == row.token_hash, m.OAuthTokenModel.revoked_at.is_(None))
+                  .values(revoked_at=datetime.utcnow())):
         revoke_grant(db, grant)
         raise OAuthError("invalid_grant", "Invalid refresh token")
     body, new_hash = _issue_tokens(db, grant)

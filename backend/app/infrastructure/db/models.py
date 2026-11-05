@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.db.session import Base
@@ -255,7 +256,9 @@ class CalendarConfirmationModel(Base):
     happened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     time_zone: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
+    # Microseconds on MySQL/MariaDB: undo picks the latest completion by this column (two may share a second).
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=False).with_variant(mysql.DATETIME(fsp=6), 'mysql', 'mariadb'),
+                                                  nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
     audit: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     previous_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)

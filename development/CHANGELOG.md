@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Migrations and tests on MariaDB (2026-11-06)
+
+- Checked on a temporary local MariaDB 13.0.2. Production runs the `mariadb:11` image, which was not tested; Docker was not running.
+  - Migrations: up from empty, down to `c3d4e5f60718`, and up again. Earlier downgrades raise on purpose (destructive).
+  - Upgrade from main's head (`a1b2c3d4e5f6`) of a database with data: a calendar, a recurring event with an exception and a reminder, an all-day event, a task, a plan with steps, a list, a setting and a draft. Every row and the Cyrillic text survived. Old calendars stay without an owner, as decided in D31.
+- Fixed:
+  - Downgrades of `293a4b5c6d74` and `0718293a4b52` failed on MariaDB (error 1553: cannot drop an index a foreign key uses). They now drop the table, which drops its indexes too.
+  - Undoing a task completion was refused at random on MariaDB ("Later completion prevents this undo"). With whole-second DATETIME, two completions in one second tied. Now `calendar_confirmations.recorded_at` is `DATETIME(6)` on MySQL/MariaDB (migration `3a4b5c6d7e85`, model variant); SQLite is unaffected.
+  - OAuth race: MariaDB 11.6+ snapshot isolation answers a second concurrent claim with error 1020 instead of updating 0 rows. That is now handled as a lost race (the connection is revoked) instead of a 500.
+- Tests:
+  - `conftest.py` accepts `TEST_DATABASE_URL`.
+  - Webhook tests dispatch from a fresh transaction, like `run_forever`, and compare retry times to the second.
+- Verified:
+  - backend on MariaDB: 194 passed, 1 skipped, twice;
+  - backend on SQLite: 194 passed, 1 skipped;
+  - the task-count test 8 times in a row on MariaDB (it failed 4 times out of 6 before the fix);
+  - migrations up, down and up again on SQLite.
+
 ### Security review of waves 1–6 and small fixes (2026-11-06)
 
 - Review of the whole branch against `main`: no high or medium findings.

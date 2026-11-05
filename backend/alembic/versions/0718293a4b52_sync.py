@@ -27,7 +27,7 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_index('ix_webhook_subscriptions_grant_id', table_name='webhook_subscriptions')
+    # The table's indexes go with it (MySQL/MariaDB refuse to drop an index a foreign key uses).
     op.drop_table('webhook_subscriptions')
     with op.batch_alter_table('calendar_changes') as batch:
         batch.drop_column('actor')

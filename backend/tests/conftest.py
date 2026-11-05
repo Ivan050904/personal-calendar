@@ -5,7 +5,8 @@ import tempfile
 
 # Override before importing app/settings/session: never touch the configured personal DB.
 _TEST_ROOT = tempfile.TemporaryDirectory(prefix="pc-synthetic-")
-os.environ["DATABASE_URL"] = f"sqlite:///{Path(_TEST_ROOT.name) / 'calendar-tests.sqlite'}"
+# TEST_DATABASE_URL points the suite at an empty MySQL/MariaDB database for dialect checks.
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{Path(_TEST_ROOT.name) / 'calendar-tests.sqlite'}"
 os.environ["APP_ENV"] = "test"
 os.environ["AUTH_USERNAME"] = "synthetic-legacy"
 os.environ["AUTH_PASSWORD"] = "synthetic-password"

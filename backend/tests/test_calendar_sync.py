@@ -139,6 +139,19 @@ def db():
         yield session
 
 
+def dispatch(db, **kwargs):
+    """Like one tick of run_forever, which opens a fresh session: start from a new transaction,
+    so MySQL/MariaDB REPEATABLE READ does not hide changes the API committed meanwhile."""
+    from app.application.webhooks import dispatch_due
+    db.rollback()
+    return dispatch_due(db, **kwargs)
+
+
+def same_second(stored, expected):
+    """MySQL/MariaDB DATETIME keeps whole seconds; SQLite keeps microseconds."""
+    return stored.replace(microsecond=0) == expected.replace(microsecond=0)
+
+
 def subscription(db, webhook_id):
     from app.infrastructure.db.models import WebhookSubscriptionModel
     db.expire_all()
@@ -165,7 +178,6 @@ def test_webhook_registration_rules(user, server):
 
 
 def test_webhook_notifies_about_others_changes_only_and_is_signed(user, server, db):
-    from app.application.webhooks import dispatch_due
     client_id, _, tokens = connect(user, server)
     auth = bearer(tokens["access_token"])
     hook = server.post("/api/v2/webhooks", json={"url": "https://tutor.example/hooks"}, headers=auth).json()
@@ -175,11 +187,11 @@ def test_webhook_notifies_about_others_changes_only_and_is_signed(user, server, 
     event = server.post("/api/v2/events", json=lesson("lesson-1"), headers=auth).json()
     assert ui_create(user, personal_id(user)).status_code == 200  # a calendar this app was not given
     assert subscription(db, hook["id"]).pending is False
-    assert dispatch_due(db, sender=sender) == 0
+    assert dispatch(db, sender=sender) == 0
 
     assert ui_patch(user, event, "Перенесли").status_code == 200
     assert ui_patch(user, {**event, "revision": event["revision"] + 1}, "Ещё раз").status_code == 200  # one notice
-    assert dispatch_due(db, sender=sender) == 1
+    assert dispatch(db, sender=sender) == 1
     url, secret, payload = sent[0]
     assert (url, secret) == ("https://tutor.example/hooks", hook["secret"])
     assert payload["type"] == "changes" and payload["webhook_id"] == hook["id"]
@@ -189,7 +201,6 @@ def test_webhook_notifies_about_others_changes_only_and_is_signed(user, server, 
 
 
 def test_webhook_retries_with_backoff_then_gives_up_after_a_day(user, server, db):
-    from app.application.webhooks import dispatch_due
     _, _, tokens = connect(user, server)
     auth = bearer(tokens["access_token"])
     hook = server.post("/api/v2/webhooks", json={"url": "https://tutor.example/hooks"}, headers=auth).json()
@@ -198,21 +209,20 @@ def test_webhook_retries_with_backoff_then_gives_up_after_a_day(user, server, db
     failing = lambda *_: "HTTP 500"  # noqa: E731
 
     start = datetime.utcnow() + timedelta(seconds=1)
-    assert dispatch_due(db, now=start, sender=failing) == 1
+    assert dispatch(db, now=start, sender=failing) == 1
     row = subscription(db, hook["id"])
-    assert row.pending and row.failures == 1 and row.next_attempt_at == start + timedelta(seconds=30)
-    assert dispatch_due(db, now=start + timedelta(seconds=10), sender=failing) == 0  # not due yet
-    assert dispatch_due(db, now=start + timedelta(seconds=31), sender=failing) == 1
-    assert subscription(db, hook["id"]).next_attempt_at == start + timedelta(seconds=31 + 60)
+    assert row.pending and row.failures == 1 and same_second(row.next_attempt_at, start + timedelta(seconds=30))
+    assert dispatch(db, now=start + timedelta(seconds=10), sender=failing) == 0  # not due yet
+    assert dispatch(db, now=start + timedelta(seconds=31), sender=failing) == 1
+    assert same_second(subscription(db, hook["id"]).next_attempt_at, start + timedelta(seconds=31 + 60))
 
     late = start + timedelta(hours=24, seconds=1)
-    assert dispatch_due(db, now=late, sender=failing) == 1
+    assert dispatch(db, now=late, sender=failing) == 1
     row = subscription(db, hook["id"])
     assert row.pending is False and row.active is True and row.last_error == "HTTP 500"
 
 
 def test_revoked_connection_gets_no_webhooks(user, server, db):
-    from app.application.webhooks import dispatch_due
     _, _, tokens = connect(user, server)
     auth = bearer(tokens["access_token"])
     hook = server.post("/api/v2/webhooks", json={"url": "https://tutor.example/hooks"}, headers=auth).json()
@@ -221,7 +231,7 @@ def test_revoked_connection_gets_no_webhooks(user, server, db):
     grant = user.get("/api/v2/grants").json()[0]
     user.delete(f"/api/v2/grants/{grant['id']}")
     sent = []
-    dispatch_due(db, sender=lambda *a: sent.append(a))
+    dispatch(db, sender=lambda *a: sent.append(a))
     assert sent == []
 
 

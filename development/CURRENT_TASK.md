@@ -23,13 +23,13 @@ Known limits:
 - the login rate limiter and the token rate limiter are in-memory (per process).
 
 Not done:
-- migrations `d4e5f6071829`, `e5f607182930`, `f60718293a41`, `0718293a4b52`, `18293a4b5c63`, `293a4b5c6d74` not run on MySQL/MariaDB;
+- migrations checked on local MariaDB 13.0.2 (2026-11-06), not on the production `mariadb:11` image;
 - the separate security review after wave 3 has not been run;
 - nothing pushed or deployed (push to `main` auto-deploys, D20).
 
 Next (owner decides):
 - ~~the security review promised after wave 3~~ — done 2026-11-06, low findings fixed (see CHANGELOG);
-- MySQL checks of the migrations;
+- ~~MySQL checks of the migrations~~ — done on MariaDB 13.0.2, see CHANGELOG;
 - deployment;
 - Folio's own migration via the handoff;
 - anti-abuse protection before opening registration.

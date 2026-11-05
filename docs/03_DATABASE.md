@@ -18,3 +18,8 @@ AI отдельной БД не получает.
 Пароли и API keys только через environment. Реальные секреты не коммитить.
 
 Будущая миграция: JSON export/import или DB migration → единая БД большого приложения. Не проектировать MVP как необратимый тупик.
+
+Проверка на MySQL/MariaDB (production — MariaDB в Docker, D18):
+- тесты сервера по умолчанию идут на временной SQLite;
+- `TEST_DATABASE_URL=mysql+pymysql://user:pass@host:port/empty_db python -m pytest` гоняет тот же набор на пустой базе MySQL/MariaDB (кодировка utf8mb4);
+- DATETIME в MySQL/MariaDB хранит целые секунды. Там, где порядок внутри секунды важен (`calendar_confirmations.recorded_at`), колонка объявлена как `DATETIME(6)`.
