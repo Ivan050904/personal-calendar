@@ -1,9 +1,11 @@
 # Current Task
 
-Calendar Platform — wave 1 (accounts and login). **Not started**: waiting for the owner's go-ahead.
+Calendar Platform — wave 1 (accounts and login): **done 2026-11-05**, waiting for the owner before wave 2 (multiple calendars).
 
-Spec: `docs/18_CALENDAR_PLATFORM.md` (§3, §11 wave 1). Decisions: D34–D38 in `docs/17_DECISIONS.md`.
+Spec: `docs/18_CALENDAR_PLATFORM.md`. Decisions: D34–D38 in `docs/17_DECISIONS.md`. Contract: `docs/04_API_CONTRACT.md` → Accounts.
 
-Previous task (Calendar/Folio integration R0–R5, 2026-10-10) is complete and committed on `codex/calendar-integration` (ba4bb8d). Its production rollout, push/deploy and legacy import were not performed and remain outside this task.
+Done in wave 1: login + password accounts (Argon2id), sessions on `calendar_sessions`, «Личное» created with the account, owner script `backend/scripts/accounts.py` (create, reset-password), `POST /api/v2/accounts` behind `REGISTRATION_ENABLED=false`, login rate limit, password change and «sign out other devices». Folio bridge and legacy login keep working.
 
-Wave 1 scope: login + password accounts (Argon2id, new dependency `argon2-cffi`), sessions on existing `calendar_sessions`, «Личное» created with the account, owner scripts (create account, reset password), `POST /api/v2/accounts` behind `REGISTRATION_ENABLED=false`, login rate limit. Existing Folio bridge and legacy login keep working. Run the wave 1 test plan and regression check, update CHANGELOG, stop before wave 2.
+Not done: no UI for account settings/registration (UI redesign is a separate task); migration `d4e5f6071829` not run on MySQL/MariaDB; nothing pushed or deployed (push to `main` auto-deploys, D20).
+
+Next: wave 2 — multiple calendars (CRUD, colour, visibility, overlay in the current UI). Start only on the owner's command.

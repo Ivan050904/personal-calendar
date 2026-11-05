@@ -17,3 +17,5 @@ AI has no SQL/repository/DB credential access.
 Audio temporary data must be removed.
 
 Before public deployment: HTTPS + auth (D17) are required.
+
+Accounts (D34): passwords stored only as Argon2id hashes; unknown login and wrong password return the same 401 and cost the same time; failed logins are rate-limited per login and per IP; password change/reset revokes sessions. Self-registration stays off (`REGISTRATION_ENABLED=false`) until anti-abuse protection exists. Owner-issued temporary passwords are printed once and never logged.

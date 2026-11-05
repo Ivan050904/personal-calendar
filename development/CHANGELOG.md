@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Calendar platform wave 1 — accounts and login (2026-11-05)
+
+- Own accounts on `calendar_principals`: `login`, Argon2id `password_hash` (new dependency `argon2-cffi`), `display_name`, `created_at`; Alembic `d4e5f6071829` (batch mode, verified upgrade/downgrade/upgrade on empty SQLite).
+- `POST /api/auth/login` checks calendar accounts first (case-insensitive login), then the env legacy login; identical 401 for unknown login and wrong password; 5 failures per login / 20 per IP in 15 min → 429.
+- `/api/v2/accounts` (behind `REGISTRATION_ENABLED=false`, creates «Личное»), `/api/v2/me`, `/api/v2/me/password` (revokes other sessions), `/api/v2/me/sessions/revoke-others`; account management is session-only.
+- Owner script `backend/scripts/accounts.py` (create, reset-password) prints a one-time temporary password; reset revokes all sessions.
+- Folio bridge and legacy login unchanged. Verified: backend 109 passed/1 real-AI skip (14 new); frontend 83 passed; build ok; lint 0 errors (4 existing warnings). MySQL/MariaDB migration not run locally (no local MySQL).
+
 ### Calendar platform spec (2026-11-05)
 
 - Added `docs/18_CALENDAR_PLATFORM.md`, approved by the owner: own accounts (login + password, no email), OAuth 2.0 Authorization Code + PKCE for registered apps, multiple calendars with per-app write calendars and an overlay view, sync (external IDs, changes feed, webhooks), attendees for shared events, Folio migration, waves 1–6.

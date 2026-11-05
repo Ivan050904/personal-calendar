@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import ai, auth, entities, health, smart_day, whisper
-from app.api.routes import integration, calendar_occurrences, calendar_commands
+from app.api.routes import integration, calendar_occurrences, calendar_commands, accounts
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -13,3 +13,4 @@ api_router.include_router(whisper.router)
 api_router.include_router(integration.router)
 api_router.include_router(calendar_occurrences.router)
 api_router.include_router(calendar_commands.router)
+api_router.include_router(accounts.router)

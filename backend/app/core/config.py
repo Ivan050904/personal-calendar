@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     folio_exchange_secret: str = ""
     folio_server_client_id: str = ""
     legacy_sso_enabled: bool = False
+    # Open self-registration stays off until anti-abuse protection exists (D34).
+    registration_enabled: bool = False
 
     # Folio-One SSO (JWT from petrushka87 / Folio login)
     folio_jwt_secret: str = ""

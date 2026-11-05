@@ -38,6 +38,10 @@ class CalendarPrincipalModel(Base):
     folio_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     legacy_alias: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    login: Mapped[str | None] = mapped_column(String(32), nullable=True, unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True, default=utcnow)
 
 
 class CalendarModel(Base, TimestampMixin):

@@ -25,6 +25,7 @@ def _is_public_path(path: str) -> bool:
             "/auth/logout",
             "/auth/sso",
             "/auth/folio",
+            "/v2/accounts",
             "/docs",
             "/openapi.json",
             "/redoc",
