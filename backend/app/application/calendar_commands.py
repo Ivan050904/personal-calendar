@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from app.application.calendar_history import record_confirmation,change_cursor
 from app.application.calendar_time import normalize_all_day,validate_timed_input,zone
 from app.application.occurrences import entity_read, remaining_occurrence_count
+from app.application.webhooks import mark_pending
 from app.core.calendar_actor import require_owned_calendar,require_scope
 from app.core.errors import AppError
 from app.infrastructure.db import models as m
@@ -31,7 +32,9 @@ def cas(db,row,expected):
 def add_change(db,actor,row,kind,operation):
     cal = require_owned_calendar(db,actor,row.calendar_id)
     db.execute(update(m.CalendarModel).where(m.CalendarModel.id == cal.id).values(revision=m.CalendarModel.revision+1,updated_at=datetime.utcnow()).execution_options(synchronize_session=False))
-    db.add(m.CalendarChangeModel(owner_id=actor.principal_id,calendar_id=row.calendar_id,entity_id=row.id,kind=kind,operation=operation,revision=row.revision,deleted=row.deleted_at is not None))
+    db.add(m.CalendarChangeModel(owner_id=actor.principal_id,calendar_id=row.calendar_id,entity_id=row.id,kind=kind,operation=operation,revision=row.revision,deleted=row.deleted_at is not None,
+                                 actor='app:'+actor.client_id if actor.client_id else 'user'))
+    mark_pending(db,actor.principal_id,row.calendar_id,actor.client_id)
     db.flush()
 
 

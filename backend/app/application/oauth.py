@@ -249,11 +249,15 @@ def actor_for_access_token(db: Session, token: str) -> CalendarActor | None:
         grant.last_used_at = now
         db.commit()
     app_calendar = _live_calendar(db, principal.id, grant.app_calendar_id)
-    readable = {cid for cid in grant.readable_calendar_ids if _live_calendar(db, principal.id, cid)}
-    if app_calendar is not None:
-        readable.add(app_calendar.id)
     return CalendarActor(principal.id, None, frozenset(grant.scopes), None, client.id, grant.id,
-                         frozenset(readable), app_calendar.id if app_calendar else None)
+                         grant_calendar_ids(db, grant), app_calendar.id if app_calendar else None)
+
+
+def grant_calendar_ids(db: Session, grant: m.OAuthGrantModel) -> frozenset[str]:
+    """Calendars this connection may read: the ticked ones plus the app's own, if they still exist."""
+    ids = {cid for cid in [*grant.readable_calendar_ids, grant.app_calendar_id]
+           if _live_calendar(db, grant.principal_id, cid)}
+    return frozenset(ids)
 
 
 def grant_read(db: Session, grant: m.OAuthGrantModel) -> dict:

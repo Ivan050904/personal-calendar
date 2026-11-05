@@ -12,6 +12,7 @@ os.environ["AUTH_PASSWORD"] = "synthetic-password"
 os.environ["AUTH_SESSION_SECRET"] = "synthetic-test-session-secret"
 os.environ["LEGACY_AUTH_ENABLED"] = "true"
 os.environ["LEGACY_PRINCIPAL_ID"] = "synthetic-legacy"
+os.environ["WEBHOOK_DISPATCH_ENABLED"] = "false"
 
 import pytest
 from fastapi.testclient import TestClient

@@ -44,7 +44,9 @@ def _app_may_call(method: str, path: str, api_prefix: str) -> bool:
     rel = rel.rstrip("/") or "/"
     if rel == "/v2/calendars":
         return method in {"GET", "HEAD"}
-    return rel == "/oauth/userinfo" or rel == "/v2/events" or rel.startswith("/v2/events/")
+    if rel == "/v2/changes":
+        return method in {"GET", "HEAD"}
+    return rel in {"/oauth/userinfo", "/v2/events", "/v2/webhooks"} or rel.startswith(("/v2/events/", "/v2/webhooks/"))
 
 
 def _service_token_ok(request: Request, settings) -> bool:

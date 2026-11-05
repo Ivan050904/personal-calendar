@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Calendar platform wave 4 — sync: external ids, changes feed, webhooks (2026-11-06)
+
+- Events get `source_client_id` + `external_id`, unique per calendar; Alembic `0718293a4b52`, checked on SQLite with upgrade, downgrade and upgrade again.
+- An app's `POST /api/v2/events` with a known `external_id` updates that event (200) instead of duplicating it. An optional `If-Match` gives 409 on a stale revision. An event the user deleted is not resurrected (409). `external_id` appears in v2 event responses.
+- `calendar_changes.actor` (`user` / `app:<client_id>`) and `GET /api/v2/changes`, filtered to the calendars the reader may see; the cursor is bound to the reader.
+- `POST`/`DELETE /api/v2/webhooks`:
+  - HMAC-SHA256 signed hints with a timestamp; changes are coalesced and the app is not notified of its own changes;
+  - only https URLs to public addresses, checked before every delivery; no redirects;
+  - retries back off from 30 s to 1 h for up to 24 h;
+  - delivered by an in-process loop started in the app lifespan (`WEBHOOK_DISPATCH_ENABLED`, off in tests).
+- Verified: backend 175 passed and 1 real-AI skip (14 new). A mutation check on the feed filter, own-change skip, upsert, actor and revoked grant turns the tests red. Frontend 87 passed; tsc and build ok; lint 0 errors (4 existing warnings). The delivery loop was smoke-checked in a started app.
+- Not run: the MySQL/MariaDB migration; a real outbound HTTP delivery, since tests mock the HTTP call.
+
 ### Calendar platform wave 3 — OAuth for apps and API v2 events (2026-11-05)
 
 - Hand-written OAuth 2.0 server (D35) under `/api/oauth/*`: authorize (login form + consent with calendar picker, CSRF, anti-framing), token (authorization_code with PKCE S256, refresh with rotation), revoke, userinfo, `/api/.well-known/oauth-authorization-server`. Tables `oauth_clients`, `oauth_grants`, `oauth_authorization_codes`, `oauth_tokens` (Alembic `f60718293a41`); all secrets stored as SHA-256.

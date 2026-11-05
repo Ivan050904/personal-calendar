@@ -63,7 +63,7 @@ Refresh-токен живёт 30 дней и меняется при каждо�
 Ошибки: `{error, error_description}` — `invalid_client` 401, `invalid_grant` / `unsupported_grant_type` 400, `slow_down` 429.
 POST /api/oauth/revoke — `token` + аутентификация клиента → 200 `{}` (RFC 7009: неизвестный токен тоже 200). Отзывает всё разрешение.
 GET /api/oauth/userinfo — нужен `openid` → `{sub}`; с `profile` ещё `preferred_username`, `name`.
-Bearer-токен приложения открывает только `GET /api/v2/calendars`, `/api/v2/events*` и `/api/oauth/userinfo`. Всё остальное → 403 «Not available to connected apps». Просроченный или отозванный токен → 401.
+Bearer-токен приложения открывает только `GET /api/v2/calendars`, `/api/v2/events*`, `GET /api/v2/changes`, `/api/v2/webhooks*` и `/api/oauth/userinfo`. Всё остальное → 403 «Not available to connected apps». Просроченный или отозванный токен → 401.
 GET /api/v2/grants — только сессия → `[{id, client_id, client_name, scopes, readable_calendar_ids, app_calendar_id, created_at, last_used_at}]`. DELETE /api/v2/grants/{id} → `{id, revoked: true}`, токены гаснут сразу. Чужое разрешение → 404.
 
 ## Events v2 (wave 3)
@@ -72,7 +72,24 @@ GET /api/v2/events?calendar_id=&from=YYYY-MM-DD&to=YYYY-MM-DD[&timezone=&cursor=
 GET /api/v2/events/{id} — запись события (как в `/api/entities`).
 POST /api/v2/events[?calendar_id=] — тело = payload события, необязательный `Idempotency-Key: <uuid>` → 201, результат команды. Приложение пишет только в свой календарь: другой `calendar_id` → 403, удалённый календарь приложения → 403 до повторного согласия.
 PATCH /api/v2/events/{id}[?occurrence_key=&scope=this|thisAndFollowing|series] — нужен `If-Match: <revision>` (без него 428, устаревший → 409 `conflict`); `Idempotency-Key` необязателен. DELETE — те же параметры → `{id, deleted: true}`. Приложение меняет только события своего календаря (иначе 403).
-Пока нет (позже): `external_id`, `tasks`/`plans` v2, `freebusy`, `changes`, webhooks, участники.
+В ответах v2 у события есть поле `external_id` (`null`, если его не задавали).
+**external_id (D37, wave 4).** Приложение может передать в теле POST поле `external_id`: строку 1–255 символов, свой ID события, например «урок №123». Интерфейс календаря его не задаёт (→ 422).
+Пара (календарь приложения, приложение, `external_id`) уникальна. Повторный POST с тем же `external_id` обновляет найденное событие и отвечает 200, а не создаёт новое (201). `If-Match` при этом необязателен: если передан, устаревшая ревизия → 409.
+Если пользователь удалил это событие, повторный POST → 409 `conflict` с `details: {entity_id, deleted: true}`: событие не воскрешается.
+Повтор с тем же `Idempotency-Key` возвращает исходный результат.
+Пока нет (позже): `tasks`/`plans` v2, `freebusy`, участники.
+
+## Sync (D37, wave 4)
+GET /api/v2/changes?cursor=&limit≤500 → `{items, next_cursor, complete, server_now}`.
+Запись ленты: `{id, calendar_id, entity_id, kind: event|task|plan, operation, revision, deleted, actor, changed_at}`. `actor` = `"user"` (интерфейс календаря и мост Folio) или `"app:<client_id>"`: по нему приложение отсеивает собственные правки.
+Приложению нужен `events.read`. Оно видит только изменения в доступных ему календарях: отмеченных на экране согласия и своём. Интерфейс (cookie) видит весь аккаунт.
+Без `cursor` лента идёт с начала. `next_cursor` выдаётся всегда, его надо сохранить и передать в следующий раз; `complete: false` значит, что есть ещё страницы. Курсор привязан к читателю: чужой или испорченный → 409 `cursor_invalid`.
+POST /api/v2/webhooks — только приложение, нужен `events.read`. Тело `{url}`: https, без логина/пароля в URL и без `#`, иначе 422. Ответ 201 `{id, url, secret: "pcw_…", created_at}`, `secret` показывается один раз. Не больше 5 на подключение (→ 409). Интерфейс → 403.
+DELETE /api/v2/webhooks/{id} → `{id, deleted: true}`; чужой → 404.
+Уведомление: `POST <url>`, JSON `{type: "changes", webhook_id, change_cursor}`. Заголовки: `X-Calendar-Timestamp: <unix-секунды>` и `X-Calendar-Signature: sha256=<hex HMAC-SHA256(secret, "<timestamp>." + тело)>`. Получатель проверяет подпись и свежесть отметки времени, отвечает 2xx, а за данными идёт в ленту со своего сохранённого курсора. `change_cursor` — позиция ленты после этих изменений.
+Свои правки приложения не вызывают уведомлений. Много изменений подряд дают одно уведомление.
+Неудача (не 2xx, таймаут 5 с, редирект, адрес не публичный) → повторы через 30 с, 1, 5, 15, 30 мин, затем раз в час, до 24 часов. После этого уведомление снимается; подписка остаётся, лента хранит всё.
+Отзыв подключения останавливает уведомления.
 
 ## Stable errors
 validation_error, clarification_required, not_found, ambiguous_target, draft_expired, draft_already_completed, ai_provider_error, transcription_error, database_error, unauthorized, forbidden, conflict, unavailable, rate_limited.

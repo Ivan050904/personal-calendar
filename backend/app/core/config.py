@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     legacy_sso_enabled: bool = False
     # Open self-registration stays off until anti-abuse protection exists (D34).
     registration_enabled: bool = False
+    # Background delivery of webhook notifications (D37); tests switch it off and call dispatch directly.
+    webhook_dispatch_enabled: bool = True
 
     # Folio-One SSO (JWT from petrushka87 / Folio login)
     folio_jwt_secret: str = ""

@@ -77,6 +77,10 @@ class EventModel(Base, TimestampMixin):
     category_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     color: Mapped[str] = mapped_column(String(32), nullable=False)
     recurrence_rule_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # D37: the app's own id for this event; (calendar, client, external_id) is unique.
+    source_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    __table_args__ = (UniqueConstraint('calendar_id', 'source_client_id', 'external_id', name='uq_events_external_id'),)
 
 
 class RecurrenceRuleModel(Base, TimestampMixin):
@@ -261,6 +265,8 @@ class CalendarChangeModel(Base):
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
     deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 'user' or 'app:<client_id>' (D37); NULL on rows written before wave 4 means 'user'.
+    actor: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
 
 # --- OAuth 2.0 for connected apps (D35, wave 3). Secrets, codes and tokens are stored only as SHA-256.
@@ -309,4 +315,23 @@ class OAuthTokenModel(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     replaced_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
+
+
+class WebhookSubscriptionModel(Base):
+    """D37: a hint 'there are changes' to an app's URL; the feed stays the source of truth.
+
+    `secret` is kept as is: the server must sign with it, so a hash would not do."""
+    __tablename__ = 'webhook_subscriptions'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    grant_id: Mapped[str] = mapped_column(String(36), ForeignKey('oauth_grants.id'), nullable=False, index=True)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    secret: Mapped[str] = mapped_column(String(64), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    first_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
