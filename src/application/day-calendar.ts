@@ -23,6 +23,8 @@ export interface EventDraft {
   allDay?: boolean
   categoryId?: string
   recurrence?: RecurrenceDraft
+  /** Target calendar for a new event (API mode, D36); defaults to the primary calendar. */
+  calendarId?: string
 }
 
 export interface DayCalendarService {

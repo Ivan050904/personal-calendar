@@ -153,8 +153,15 @@ class CalendarRepository(SqlEntityRepository[m.CalendarModel]):
             row = self.session.get(self.model,entity['id'])
             if self.session.scalar(select(self.model).where(self.model.default_owner == self.actor.principal_id)) is None:
                 row.default_owner = self.actor.principal_id
+                row.kind = "personal"
                 self.session.flush()
         return saved
+
+    def apply_dict(self, row, entity):
+        # The legacy entity API manages only these; kind/colour/visibility belong to /v2/calendars (D36).
+        fresh = self.from_dict(entity)
+        for name in ("name", "timezone", "updated_at", "deleted_at"):
+            setattr(row, name, getattr(fresh, name))
 
     def get_local_calendar(self) -> dict[str, Any] | None:
         if self.actor:

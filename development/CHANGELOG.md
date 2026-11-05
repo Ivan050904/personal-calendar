@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Calendar platform wave 2 — several calendars (2026-11-05)
+
+- `calendars` gets `kind` (personal/user/app), `source_client_id`, `color`, `visible`, `sort_order`; Alembic `e5f607182930` marks each owner's default calendar `personal` (verified on SQLite with data, plus downgrade/upgrade).
+- `/api/v2/calendars` list/create/patch/delete (soft); «Личное» cannot be deleted; foreign calendars → 404. Legacy `PUT /api/entities/calendars` no longer resets kind/colour/visibility.
+- `POST /api/commands` accepts optional `calendar_id` on create only.
+- UI (API mode): board overlays events and plans of every visible calendar, non-primary ones in their calendar colour; event form gets a «Календарь» picker when there is a choice; Settings → «Календари» (visibility, colour, rename, add, delete).
+- Verified: backend 121 passed/1 real-AI skip (12 new); frontend 87 passed (4 new); build ok; lint 0 errors (4 existing warnings). Manually checked in the browser on a temporary SQLite API: create «Спорт», create an event into it (shows in its colour, stored in that calendar), hide it (disappears). MySQL/MariaDB migration not run locally.
+
 ### Calendar platform wave 1 — accounts and login (2026-11-05)
 
 - Own accounts on `calendar_principals`: `login`, Argon2id `password_hash` (new dependency `argon2-cffi`), `display_name`, `created_at`; Alembic `d4e5f6071829` (batch mode, verified upgrade/downgrade/upgrade on empty SQLite).

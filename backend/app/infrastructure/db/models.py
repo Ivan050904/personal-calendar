@@ -52,6 +52,12 @@ class CalendarModel(Base, TimestampMixin):
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     owner_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("calendar_principals.id"), nullable=True, index=True)
     default_owner: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    # D36: personal («Личное», one per account) | app (one per connected app, wave 3) | user
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
+    source_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    color: Mapped[str] = mapped_column(String(16), nullable=False, default="#0f766e")
+    visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class EventModel(Base, TimestampMixin):

@@ -67,7 +67,7 @@ def ensure_actor_calendar(db: Session, actor: CalendarActor, timezone: str, idem
         try:
             with db.begin_nested():
                 row = CalendarModel(id=str(uuid4()), name="Personal Calendar", timezone=timezone,
-                                    owner_id=actor.principal_id, default_owner=actor.principal_id)
+                                    owner_id=actor.principal_id, default_owner=actor.principal_id, kind="personal")
                 db.add(row)
                 db.flush()
         except IntegrityError:

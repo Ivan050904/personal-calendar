@@ -77,10 +77,13 @@ class CalendarWriteRequest(BaseModel):
     occurrence_key: str | None = Field(default=None,max_length=100)
     scope: Literal['this','thisAndFollowing','series'] | None = None
     expected_revision: int | None = Field(default=None,ge=1)
+    calendar_id: str | None = Field(default=None,min_length=1,max_length=64)  # create only; default «Личное»
     payload: CalendarEntityPayload
 
     @model_validator(mode='after')
     def contract(self):
+        if self.calendar_id is not None and self.operation != 'create':
+            raise ValueError('calendar_id is only accepted on create')
         if self.operation == 'create':
             if self.entity_id is not None or not self.payload.title or not self.payload.timezone:
                 raise ValueError('Creation requires title/timezone and no existing id')

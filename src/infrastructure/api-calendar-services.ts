@@ -6,6 +6,16 @@ import { LocalTasksService, type TaskDraft, type TaskActionSnapshot } from '../a
 import { LocalPlansService, type PlanDraft } from '../application/plans'
 import { allOccurrencePages, entityDetail, exactOccurrence, sendCalendarCommand, type CalendarEntityRead, type CalendarOccurrenceRead } from './calendar-occurrence-api'
 import { calendarTransport } from './api-repositories'
+import { overlayTargets } from './calendars-api'
+
+/** Occurrences of every visible calendar for the board (D36). */
+async function overlayOccurrences(primary: Calendar, from: string, to: string, kind: 'event' | 'plan') {
+  const pages = await Promise.all(overlayTargets(primary.id).map(async target => {
+    const rows = (await allOccurrencePages(target.id, from, to, primary.timezone)).filter(row => row.kind === kind)
+    return target.color ? rows.map(row => ({ ...row, color: target.color! })) : rows
+  }))
+  return pages.flat()
+}
 
 function recurrence(draft?: RecurrenceDraft) {
   return draft ? { frequency: draft.frequency, interval: draft.interval, weekdays: draft.weekdays, day_of_month: draft.dayOfMonth ?? null, until_date: draft.untilDate ?? null, occurrence_count: draft.occurrenceCount ?? null, dst_gap_policy: 'skip', dst_fold_policy: 'earlier' } : null
@@ -49,12 +59,13 @@ export class ApiDayCalendarService implements DayCalendarService {
   constructor(readonly calendar: Calendar) {}
   async listEvents(date: string) { return this.listEventsInRange(date, date) }
   async listEventsInRange(from: string, to: string) {
-    const rows = (await allOccurrencePages(this.calendar.id, from, to, this.calendar.timezone)).filter(row => row.kind === 'event')
+    const rows = await overlayOccurrences(this.calendar, from, to, 'event')
     rows.forEach(row => this.revisions.set(row.entity_id, row.revision))
     return rows.map(occurrenceEvent)
   }
   async createEvent(draft: EventDraft) {
-    const result = await command('event', 'create', eventPayload(draft, this.calendar.timezone))
+    const target = draft.calendarId && draft.calendarId !== this.calendar.id ? { calendar_id: draft.calendarId } : {}
+    const result = await command('event', 'create', eventPayload(draft, this.calendar.timezone), target)
     this.revisions.set(result.entity.id, result.entity.revision)
     return occurrenceEvent(result.entity)
   }
@@ -124,5 +135,5 @@ export class ApiPlansService extends LocalPlansService {
     return occurrenceEvent((await command('plan', 'patch', { title: draft.title, description: draft.description ?? null, start_at: draft.startAt, end_at: draft.endAt, color: draft.color }, { entity_id: id, expected_revision: readRevision(draft.expectedRevision) })).entity)
   }
   override async deletePlan(id: string, expectedRevision?: number) { await command('plan', 'delete', {}, { entity_id: id, expected_revision: readRevision(expectedRevision) }) }
-  override async listPlansInRange(from: string, to: string): Promise<Plan[]> { return (await allOccurrencePages(this.calendar.id, from, to, this.calendar.timezone)).filter(row => row.kind === 'plan').map(occurrenceEvent) }
+  override async listPlansInRange(from: string, to: string): Promise<Plan[]> { return (await overlayOccurrences(this.calendar, from, to, 'plan')).map(occurrenceEvent) }
 }

@@ -66,7 +66,7 @@ def create_account(db: Session, login: str, password: str, display_name: str | N
             db.add(principal)
             db.flush()
             db.add(CalendarModel(id=str(uuid4()), name=PERSONAL_CALENDAR_NAME, timezone=timezone,
-                                 owner_id=principal.id, default_owner=principal.id))
+                                 owner_id=principal.id, default_owner=principal.id, kind="personal"))
             db.flush()
     except IntegrityError:
         raise AppError("conflict", "Логин занят", status_code=409) from None

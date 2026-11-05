@@ -111,7 +111,7 @@ def execute_calendar_command(db,actor,request):
         model = MODELS[envelope.kind]
         confirmation = None
         if envelope.operation == 'create':
-            cal = _default_calendar(db,actor)
+            cal = require_owned_calendar(db,actor,envelope.calendar_id) if envelope.calendar_id else _default_calendar(db,actor)
             row = model(id=str(uuid4()),calendar_id=cal.id,title=payload['title'],revision=1,created_at=datetime.utcnow(),updated_at=datetime.utcnow())
             if envelope.kind != 'task':
                 row.timezone,row.color = payload['timezone'],payload.get('color') or '#0f766e'

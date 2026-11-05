@@ -19,6 +19,7 @@ import { resolveCalendarTarget } from '../application/calendar-deep-link'
 import { exactOccurrence } from '../infrastructure/calendar-occurrence-api'
 import { occurrenceEvent } from '../infrastructure/api-calendar-services'
 import { shouldUseApiRepository } from '../infrastructure/api-repositories'
+import { createCalendar, deleteCalendar, listCalendars, patchCalendar, setOverlayCalendars, type CalendarV2 } from '../infrastructure/calendars-api'
 import type { PlansService } from '../application/plans'
 import type { TasksService } from '../application/tasks'
 import type { LocalListsService } from '../application/lists'
@@ -201,6 +202,7 @@ export function App({
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
   const [status, setStatus] = useState<string | undefined>()
   const [boardRevision, setBoardRevision] = useState(0)
+  const [calendars, setCalendars] = useState<CalendarV2[]>([])
   const [focusPlanId, setFocusPlanId] = useState<string | undefined>()
   const [dockOpen, setDockOpen] = useState(false)
   const touchStartX = useRef<number | undefined>(undefined)
@@ -208,6 +210,20 @@ export function App({
   const dayTimelineRef = useRef<HTMLElement | null>(null)
   const coarsePointer = useCoarsePointer()
   const allowDayDrag = !coarsePointer
+
+  // D36: every visible calendar is overlaid on the board; a change reloads all views.
+  const applyCalendars = useCallback((list: CalendarV2[]) => {
+    setOverlayCalendars(list)
+    setCalendars(list)
+    setBoardRevision((value) => value + 1)
+  }, [])
+  const reloadCalendars = useCallback(async () => applyCalendars(await listCalendars()), [applyCalendars])
+  useEffect(() => {
+    if (!shouldUseApiRepository()) return
+    let active = true
+    void listCalendars().then((list) => { if (active) applyCalendars(list) }).catch(() => undefined)
+    return () => { active = false; setOverlayCalendars([]) }
+  }, [applyCalendars])
 
   useEffect(() => {
     if (!shouldUseApiRepository()) return
@@ -808,6 +824,8 @@ export function App({
       {section === 'settings' && (
         <SettingsSection
           services={services}
+          calendars={shouldUseApiRepository() ? calendars : undefined}
+          onCalendarsChanged={reloadCalendars}
           theme={theme}
           onTheme={setTheme}
           visibleHours={visibleHoursPref}
@@ -849,6 +867,7 @@ export function App({
           reminders={services.reminders}
           categories={services.categories}
           editingId={editing?.id}
+          calendars={editing === undefined ? calendars.filter((item) => item.kind !== 'app') : []}
           onCancel={() => { setDraft(undefined); setEditing(undefined) }}
           onSubmit={async (nextDraft, offsets) => submit(nextDraft, offsets)}
         />
@@ -925,12 +944,14 @@ function ScopeDialog({ kind, onCancel, onChoose }: { kind: 'edit' | 'delete'; on
   )
 }
 
-function EventForm({ draft, timezone, reminders, categories, editingId, onCancel, onSubmit }: {
+function EventForm({ draft, timezone, reminders, categories, editingId, calendars = [], onCancel, onSubmit }: {
   draft: EventDraft
   timezone: string
   reminders: LocalRemindersService
   categories: LocalCategoriesService
   editingId?: string
+  /** Calendars a new event may go to; the picker shows only when there is a choice. */
+  calendars?: CalendarV2[]
   onCancel: () => void
   onSubmit: (draft: EventDraft, reminderOffsets: number[]) => Promise<void>
 }) {
@@ -995,6 +1016,20 @@ function EventForm({ draft, timezone, reminders, categories, editingId, onCancel
       <form className="event-form-card" onClick={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submit() }}>
         <h2>Событие</h2>
         <label>Название<input required value={value.title} onChange={(event) => setValue({ ...value, title: event.target.value })} /></label>
+        {calendars.length > 1 && (
+          <label>
+            Календарь
+            <select
+              aria-label="Календарь события"
+              value={value.calendarId ?? calendars[0].id}
+              onChange={(event) => setValue({ ...value, calendarId: event.target.value })}
+            >
+              {calendars.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           Категория
           <select
@@ -1971,10 +2006,83 @@ function TrashSection({ services, onRestored, boardRevision = 0 }: { services: A
   )
 }
 
+function CalendarsSettings({ calendars, onChanged }: { calendars: CalendarV2[]; onChanged: () => Promise<void> }) {
+  const [newName, setNewName] = useState('')
+  const [error, setError] = useState<string | undefined>()
+  const run = (action: () => Promise<unknown>) => {
+    setError(undefined)
+    void action().then(onChanged).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Не удалось сохранить'))
+  }
+  return (
+    <div className="settings-block">
+      <p className="settings-label">Календари</p>
+      <p className="hint">Все отмеченные календари показываются вместе, каждый своим цветом.</p>
+      <ul className="settings-category-list">
+        {calendars.map((item) => (
+          <li key={item.id}>
+            <div className="composer-row">
+              <input
+                type="checkbox"
+                aria-label={`Показывать ${item.name}`}
+                checked={item.visible}
+                onChange={(event) => run(() => patchCalendar(item.id, { visible: event.target.checked }))}
+              />
+              <input
+                type="color"
+                aria-label={`Цвет ${item.name}`}
+                value={item.color}
+                onChange={(event) => run(() => patchCalendar(item.id, { color: event.target.value }))}
+              />
+              <input
+                aria-label={`Название ${item.name}`}
+                defaultValue={item.name}
+                onBlur={(event) => {
+                  const name = event.target.value.trim()
+                  if (name !== '' && name !== item.name) run(() => patchCalendar(item.id, { name }))
+                }}
+              />
+              {item.kind === 'app' && <span className="hint">приложение</span>}
+              {item.kind !== 'personal' && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    if (!window.confirm(`Удалить календарь «${item.name}» вместе с его записями?`)) return
+                    run(() => deleteCalendar(item.id))
+                  }}
+                >
+                  Удалить
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="composer-row">
+        <input aria-label="Новый календарь" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Название" />
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => {
+            const name = newName.trim()
+            if (name === '') return
+            run(async () => { await createCalendar({ name }); setNewName('') })
+          }}
+        >
+          Добавить
+        </button>
+      </div>
+      {error !== undefined && <p className="login-error" role="alert">{error}</p>}
+    </div>
+  )
+}
+
 function SettingsSection({
-  services, theme, onTheme, visibleHours, onVisibleHours, notificationsEnabled, onNotifications, onExport, onImport, onLogout,
+  services, calendars, onCalendarsChanged, theme, onTheme, visibleHours, onVisibleHours, notificationsEnabled, onNotifications, onExport, onImport, onLogout,
 }: {
   services: AppServices
+  calendars?: CalendarV2[]
+  onCalendarsChanged: () => Promise<void>
   theme: 'light' | 'dark'
   onTheme: (theme: 'light' | 'dark') => void
   visibleHours: VisibleHoursPreference
@@ -2002,6 +2110,8 @@ function SettingsSection({
   return (
     <section className="side-panel settings-panel">
       <h1>Настройки</h1>
+
+      {calendars !== undefined && <CalendarsSettings calendars={calendars} onChanged={onCalendarsChanged} />}
 
       <div className="settings-block">
         <p className="settings-label">Категории</p>

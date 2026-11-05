@@ -43,6 +43,14 @@ POST /api/v2/me/password — `{current_password, new_password}`; только с
 POST /api/v2/me/sessions/revoke-others — только сессия → `{revoked: N}`.
 Владелец: `python backend/scripts/accounts.py create <login> [--name] [--timezone]` и `reset-password <login>` печатают одноразовый временный пароль; сброс отзывает все сессии.
 
+## Calendars (D36, wave 2)
+GET /api/v2/calendars — свои календари без удалённых: «Личное» первым, затем свои (`user`), затем календари приложений (`app`); внутри — по `sort_order`. Поля: `id, name, kind, color, visible, sort_order, timezone, source_client_id, revision, created_at, updated_at`.
+POST /api/v2/calendars — `{name, color?, timezone?}` → 201, `kind=user`; цвет `#RRGGBB` (по умолчанию `#2563eb`), часовой пояс по умолчанию как у «Личного». Неизвестные поля (например `kind`) → 422.
+PATCH /api/v2/calendars/{id} — `{name?, color?, visible?, sort_order?}`; `revision` +1. Чужой календарь → 404.
+DELETE /api/v2/calendars/{id} — мягкое удаление; записи остаются в БД, но читать и писать их больше нельзя (404). «Личное» → 409.
+POST /api/commands — новое необязательное поле `calendar_id`, только для `operation=create` (иначе 422): запись создаётся в этом календаре владельца; без поля — в «Личном», как раньше. Чужой или удалённый → 404.
+GET /api/occurrences?calendar_id= принимает любой свой календарь (без изменений контракта). Интерфейс запрашивает каждый видимый календарь и накладывает их.
+
 ## Stable errors
 validation_error, clarification_required, not_found, ambiguous_target, draft_expired, draft_already_completed, ai_provider_error, transcription_error, database_error, unauthorized, forbidden, conflict, unavailable, rate_limited.
 
