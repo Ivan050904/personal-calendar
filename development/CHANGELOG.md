@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Check on the production image `mariadb:11` (2026-11-06)
+
+- Docker, `mariadb:11` → 11.8.9, started like `scripts/deploy_calendar.py` does; databases with server defaults (`utf8mb4_uca1400_ai_ci`).
+- Migrations up, down to `c3d4e5f60718`, and up again; an old-schema database with data upgraded from `a1b2c3d4e5f6`, all rows and Cyrillic text intact; `recorded_at` is `datetime(6)`.
+- Backend suite: 194 passed, 1 skipped. No code changes.
+- Found, not fixed (owner decision): the default collation is case- and accent-insensitive, so `external_id` of events/tasks/plans treats `Lesson-1` and `lesson-1` as the same id; on SQLite they differ. Token hashes (lowercase hex), logins (normalised lowercase latin) and occurrence keys are not affected.
+- The production container may run an older 11.x than 11.8.9 if it was created earlier.
+
 ### Migrations and tests on MariaDB (2026-11-06)
 
 - Checked on a temporary local MariaDB 13.0.2. Production runs the `mariadb:11` image, which was not tested; Docker was not running.
