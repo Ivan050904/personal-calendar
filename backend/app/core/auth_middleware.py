@@ -44,9 +44,11 @@ def _app_may_call(method: str, path: str, api_prefix: str) -> bool:
     rel = rel.rstrip("/") or "/"
     if rel == "/v2/calendars":
         return method in {"GET", "HEAD"}
-    if rel == "/v2/changes":
+    if rel in {"/v2/changes", "/v2/agenda", "/v2/history", "/v2/reminder-source"} or rel.startswith(
+            ("/v2/occurrences/", "/v2/confirmations/")):
         return method in {"GET", "HEAD"}
-    return rel in {"/oauth/userinfo", "/v2/events", "/v2/webhooks"} or rel.startswith(("/v2/events/", "/v2/webhooks/"))
+    records = ("/v2/events", "/v2/tasks", "/v2/plans", "/v2/webhooks")
+    return rel == "/oauth/userinfo" or rel in records or rel.startswith(tuple(r + "/" for r in records))
 
 
 def _service_token_ok(request: Request, settings) -> bool:
@@ -88,6 +90,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 with SessionLocal() as db:
                     actor = actor_for_access_token(db, header[7:].strip())
             elif header.lower().startswith("bearer "):
+                if not settings.folio_bridge_enabled:
+                    raise AppError("unauthorized", "The Folio bridge is switched off; connect over OAuth", status_code=401)
                 actor = verify_bridge_actor(header[7:], settings, datetime.now(timezone.utc))
                 from app.infrastructure.db.models import CalendarPrincipalModel
                 with SessionLocal() as db:

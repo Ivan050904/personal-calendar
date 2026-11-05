@@ -75,3 +75,5 @@ D36 — An account has many calendars: «Личное», one app calendar per co
 D37 — Sync: `(source_client_id, external_id)` unique per calendar; the per-grant changes feed with `actor` is the source of truth; webhooks are HMAC-signed notifications only. Existing Idempotency-Key and revision conflicts stay.
 
 D38 — Shared events (couples app): attendees by login with pending/accepted/declined in the organizer's calendar; only the organizer edits. Co-owned calendars are deferred.
+
+D39 — Folio migration path (owner, 2026-11-06): before moving Folio off the bridge, API v2 gets everything Folio uses in `/integration/v1` (tasks, plans, confirm/complete/restore, agenda, occurrences, confirmations, history, reminder source) under the D36 app rules. Folio's existing records stay in «Личное»: Folio reads them if the user ticks «Личное» on consent and never edits them. New Folio records go to its own «Folio» calendar. Rejected alternatives: keeping Folio on v1 with OAuth identity, which breaks D36 write isolation; moving old «Личное» records into «Folio», which is impossible to tell apart from the user's own records. Bridge switch: `FOLIO_BRIDGE_ENABLED`.

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Calendar platform wave 5 — Folio migration, calendar side (2026-11-06)
+
+- Owner decision D39: API v2 first gets everything Folio uses in `/integration/v1`; old Folio records stay in «Личное», readable but not editable by apps.
+- `/api/v2/tasks` and `/api/v2/plans` work like events, with `external_id` (Alembic `18293a4b5c63`, checked on SQLite with upgrade, downgrade and upgrade again). The events router became a generic `entities_v2`.
+- `POST /api/v2/{events|tasks|plans}/{id}/{confirm|complete|restore}`.
+- `GET /api/v2/agenda`, `/occurrences/{id}`, `/confirmations/{id}`, `/history` (filtered to the app's calendars), `/reminder-source`.
+- `POST /api/v2/me/credentials` plus a «Логин и пароль» block in Settings, for accounts without a login (made through Folio, or the env owner).
+- `FOLIO_BRIDGE_ENABLED` switches off the bridge JWT and `/auth/folio` (401).
+- Verified:
+  - backend 182 passed and 1 real-AI skip (7 new); a mutation check on the history filter, the own-calendar write rule, the bridge switch, login-once and the entity reads turns the tests red;
+  - frontend 87 passed; tsc and build ok; lint 0 errors (4 existing warnings);
+  - in the browser on a temporary SQLite API: the env owner without a login sees the block, sets a login and password, and signs in with them as the same account.
+- The test module soft-deletes its own calendars and plans so the unscoped `test_repositories.py` keeps passing.
+- Not run: MySQL/MariaDB migrations. Folio's own side is not done (handoff updated).
+
 ### Calendar platform wave 4 — sync: external ids, changes feed, webhooks (2026-11-06)
 
 - Events get `source_client_id` + `external_id`, unique per calendar; Alembic `0718293a4b52`, checked on SQLite with upgrade, downgrade and upgrade again.

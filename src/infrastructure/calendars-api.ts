@@ -19,6 +19,15 @@ export function deleteCalendar(id: string): Promise<{ id: string; deleted: boole
   return calendarTransport(`/api/v2/calendars/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
+/** The signed-in account; `login` is null for accounts made through Folio or the old env login. */
+export interface Account { id: string; login: string | null; display_name: string | null }
+export function getMe(): Promise<Account> {
+  return calendarTransport('/api/v2/me')
+}
+export function setCredentials(body: { login: string; password: string }): Promise<Account> {
+  return calendarTransport('/api/v2/me/credentials', { method: 'POST', body: JSON.stringify(body) })
+}
+
 /** An app the user connected via OAuth (D35). */
 export interface AppGrant {
   id: string; client_id: string; client_name: string; scopes: string[]; readable_calendar_ids: string[]

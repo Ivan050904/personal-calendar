@@ -123,6 +123,10 @@ class PlanModel(Base, TimestampMixin):
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     color: Mapped[str] = mapped_column(String(32), nullable=False)
+    # D37: the app's own id (wave 5); (calendar, client, external_id) is unique.
+    source_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    __table_args__ = (UniqueConstraint('calendar_id', 'source_client_id', 'external_id', name='uq_plans_external_id'),)
 
 
 class PlanTaskModel(Base, TimestampMixin):
@@ -145,6 +149,10 @@ class TaskModel(Base, TimestampMixin):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     recurrence_rule_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # D37: the app's own id (wave 5); (calendar, client, external_id) is unique.
+    source_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    __table_args__ = (UniqueConstraint('calendar_id', 'source_client_id', 'external_id', name='uq_tasks_external_id'),)
 
 
 class TaskListModel(Base, TimestampMixin):

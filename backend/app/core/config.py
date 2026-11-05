@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     registration_enabled: bool = False
     # Background delivery of webhook notifications (D37); tests switch it off and call dispatch directly.
     webhook_dispatch_enabled: bool = True
+    # §8.4: the old Folio bridge (signed JWT + /auth/folio launch). Switch off once Folio is on OAuth.
+    folio_bridge_enabled: bool = True
 
     # Folio-One SSO (JWT from petrushka87 / Folio login)
     folio_jwt_secret: str = ""

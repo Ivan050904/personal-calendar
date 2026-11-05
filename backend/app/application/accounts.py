@@ -73,6 +73,28 @@ def create_account(db: Session, login: str, password: str, display_name: str | N
     return principal
 
 
+def set_credentials(db: Session, principal_id: str, login: str, password: str) -> CalendarPrincipalModel:
+    """§8.2/§8.5: an account made through Folio or the env login gets its own login + password, once.
+
+    Same account and data; afterwards it signs in like any other account."""
+    row = db.get(CalendarPrincipalModel, principal_id)
+    if row is None:
+        raise AppError("not_found", "Account not found", status_code=404)
+    if row.login is not None:
+        raise AppError("conflict", "У аккаунта уже есть логин", status_code=409)
+    value = _validate_login(login)
+    _validate_password(password)
+    if find_by_login(db, value) is not None:
+        raise AppError("conflict", "Логин занят", status_code=409)
+    row.login, row.password_hash = value, _hasher.hash(password)
+    row.display_name = row.display_name or value
+    try:
+        db.flush()
+    except IntegrityError:
+        raise AppError("conflict", "Логин занят", status_code=409) from None
+    return row
+
+
 def _verify(row_hash: str | None, password: str) -> bool:
     try:
         return _hasher.verify(row_hash or _DUMMY_HASH, password) and row_hash is not None

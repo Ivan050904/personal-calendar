@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.application.accounts import account_read, change_password, create_account, revoke_sessions
+from app.application.accounts import account_read, change_password, create_account, revoke_sessions, set_credentials
 from app.core.auth import set_session_cookie
 from app.core.calendar_actor import CalendarActor, require_actor
 from app.core.config import get_settings
@@ -20,6 +20,11 @@ class RegisterBody(BaseModel):
     password: str = Field(min_length=1, max_length=256)
     display_name: str | None = Field(default=None, max_length=255)
     timezone: str = Field(default='UTC', max_length=64)
+
+
+class CredentialsBody(BaseModel):
+    login: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
 
 
 class PasswordBody(BaseModel):
@@ -51,6 +56,14 @@ def me(db: Session = Depends(get_db), actor: CalendarActor = Depends(require_act
     row = db.get(CalendarPrincipalModel, actor.principal_id)
     if row is None:
         raise AppError('not_found', 'Account not found', status_code=404)
+    return account_read(row)
+
+
+@router.post('/me/credentials')
+def credentials(body: CredentialsBody, db: Session = Depends(get_db),
+                actor: CalendarActor = Depends(require_session_actor)):
+    row = set_credentials(db, actor.principal_id, body.login, body.password)
+    db.commit()
     return account_read(row)
 
 

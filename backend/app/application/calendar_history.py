@@ -86,11 +86,15 @@ def change_cursor(db,actor):
     return encode_cursor('changes|'+actor.principal_id,last)
 
 
-def history_page(db,actor,from_day,to_day,cursor=None,limit=100):
+def history_page(db,actor,from_day,to_day,cursor=None,limit=100,calendar_ids=None):
+    """`calendar_ids` limits the page to those calendars (a connected app, wave 5); None means the whole account."""
     if to_day < from_day or not 1 <= limit <= 100:
         raise AppError('validation_error','Invalid history range/page',status_code=422)
-    rows = db.scalars(select(m.CalendarConfirmationModel).where(m.CalendarConfirmationModel.owner_id == actor.principal_id,m.CalendarConfirmationModel.happened_date >= from_day,m.CalendarConfirmationModel.happened_date <= to_day).order_by(m.CalendarConfirmationModel.happened_date,m.CalendarConfirmationModel.id)).all()
-    bound = 'history|'+actor.principal_id+'|'+str(from_day)+'|'+str(to_day)+'|'+','.join(r.id+':'+str(r.revision) for r in rows)
+    stmt = select(m.CalendarConfirmationModel).where(m.CalendarConfirmationModel.owner_id == actor.principal_id,m.CalendarConfirmationModel.happened_date >= from_day,m.CalendarConfirmationModel.happened_date <= to_day)
+    if calendar_ids is not None:
+        stmt = stmt.where(m.CalendarConfirmationModel.calendar_id.in_(sorted(calendar_ids)))
+    rows = db.scalars(stmt.order_by(m.CalendarConfirmationModel.happened_date,m.CalendarConfirmationModel.id)).all()
+    bound = 'history|'+actor.principal_id+'|'+','.join(sorted(calendar_ids or []))+'|'+str(from_day)+'|'+str(to_day)+'|'+','.join(r.id+':'+str(r.revision) for r in rows)
     offset = decode_cursor(cursor,bound)
     return {'contract_version':2,'items':[confirmation_read(r) for r in rows[offset:offset+limit]],
             'complete':offset+limit>=len(rows),'next_cursor':None if offset+limit>=len(rows) else encode_cursor(bound,offset+limit),

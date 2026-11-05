@@ -19,7 +19,7 @@ import { resolveCalendarTarget } from '../application/calendar-deep-link'
 import { exactOccurrence } from '../infrastructure/calendar-occurrence-api'
 import { occurrenceEvent } from '../infrastructure/api-calendar-services'
 import { shouldUseApiRepository } from '../infrastructure/api-repositories'
-import { createCalendar, deleteCalendar, listCalendars, listGrants, patchCalendar, revokeGrant, setOverlayCalendars, type AppGrant, type CalendarV2 } from '../infrastructure/calendars-api'
+import { createCalendar, deleteCalendar, getMe, listCalendars, listGrants, patchCalendar, revokeGrant, setCredentials, setOverlayCalendars, type AppGrant, type CalendarV2 } from '../infrastructure/calendars-api'
 import type { PlansService } from '../application/plans'
 import type { TasksService } from '../application/tasks'
 import type { LocalListsService } from '../application/lists'
@@ -2082,6 +2082,45 @@ const SCOPE_LABELS: Record<string, string> = {
   'events.read': 'чтение событий', 'events.write': 'запись в свой календарь',
 }
 
+/** §8.2: accounts made through Folio (or the old env login) set their own login and password once. */
+function AccountCredentials() {
+  const [needed, setNeeded] = useState(false)
+  const [login, setLogin] = useState('')
+  const [password, setPassword] = useState('')
+  const [message, setMessage] = useState<string | undefined>()
+  const [error, setError] = useState<string | undefined>()
+  useEffect(() => {
+    let active = true
+    void getMe().then((me) => { if (active) setNeeded(me.login === null) }).catch(() => undefined)
+    return () => { active = false }
+  }, [])
+  if (!needed && message === undefined) return null
+  return (
+    <div className="settings-block">
+      <p className="settings-label">Логин и пароль</p>
+      {message !== undefined ? <p className="hint">{message}</p> : (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            setError(undefined)
+            void setCredentials({ login, password })
+              .then((me) => { setNeeded(false); setPassword(''); setMessage(`Готово: теперь можно входить как «${me.login}».`) })
+              .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Не удалось сохранить'))
+          }}
+        >
+          <p className="hint">Задайте логин и пароль, чтобы входить в календарь напрямую и подключать приложения. Аккаунт и записи остаются те же.</p>
+          <div className="composer-row">
+            <input aria-label="Логин" placeholder="Логин" autoComplete="username" value={login} onChange={(e) => setLogin(e.target.value)} />
+            <input aria-label="Пароль" placeholder="Пароль, от 8 символов" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button type="submit" className="btn btn-primary" disabled={login.trim() === '' || password.length < 8}>Сохранить</button>
+          </div>
+        </form>
+      )}
+      {error !== undefined && <p className="login-error" role="alert">{error}</p>}
+    </div>
+  )
+}
+
 function ConnectedApps({ calendars }: { calendars: CalendarV2[] }) {
   const [grants, setGrants] = useState<AppGrant[] | undefined>()
   const [error, setError] = useState<string | undefined>()
@@ -2160,6 +2199,7 @@ function SettingsSection({
     <section className="side-panel settings-panel">
       <h1>Настройки</h1>
 
+      {calendars !== undefined && <AccountCredentials />}
       {calendars !== undefined && <CalendarsSettings calendars={calendars} onChanged={onCalendarsChanged} />}
       {calendars !== undefined && <ConnectedApps calendars={calendars} />}
 

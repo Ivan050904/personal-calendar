@@ -88,6 +88,8 @@ def me(request: Request, db: Session = Depends(get_db)):
 @router.get('/folio')
 def folio_launch(request: Request, db: Session = Depends(get_db)):
     settings = get_settings()
+    if not settings.folio_bridge_enabled:
+        raise AppError('unauthorized', 'The Folio bridge is switched off; sign in with login and password', status_code=401)
     code = request.query_params.get('code', '')
     if not code:
         raise AppError('unauthorized', 'Launch code is required', status_code=401)

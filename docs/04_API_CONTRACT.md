@@ -41,6 +41,7 @@ POST /api/v2/accounts — `{login, password, display_name?, timezone?}` → 201 
 GET /api/v2/me — `{id, login, display_name}`.
 POST /api/v2/me/password — `{current_password, new_password}`; только сессия (не токен приложения → 403); неверный текущий → 401; отзывает все сессии, кроме текущей.
 POST /api/v2/me/sessions/revoke-others — только сессия → `{revoked: N}`.
+POST /api/v2/me/credentials (wave 5, §8.2/§8.5) — `{login, password}`, только сессия → `{id, login, display_name}`. Для аккаунта без логина: созданного через Folio или старого входа из env. Аккаунт и данные те же, дальше вход обычный. Логин уже задан или занят → 409; формат логина или пароля → 422. В настройках интерфейса для таких аккаунтов есть блок «Логин и пароль».
 Владелец: `python backend/scripts/accounts.py create <login> [--name] [--timezone]` и `reset-password <login>` печатают одноразовый временный пароль; сброс отзывает все сессии.
 
 ## Calendars (D36, wave 2)
@@ -63,7 +64,7 @@ Refresh-токен живёт 30 дней и меняется при каждо�
 Ошибки: `{error, error_description}` — `invalid_client` 401, `invalid_grant` / `unsupported_grant_type` 400, `slow_down` 429.
 POST /api/oauth/revoke — `token` + аутентификация клиента → 200 `{}` (RFC 7009: неизвестный токен тоже 200). Отзывает всё разрешение.
 GET /api/oauth/userinfo — нужен `openid` → `{sub}`; с `profile` ещё `preferred_username`, `name`.
-Bearer-токен приложения открывает только `GET /api/v2/calendars`, `/api/v2/events*`, `GET /api/v2/changes`, `/api/v2/webhooks*` и `/api/oauth/userinfo`. Всё остальное → 403 «Not available to connected apps». Просроченный или отозванный токен → 401.
+Bearer-токен приложения открывает только `GET /api/v2/calendars`, `/api/v2/events*`, `/api/v2/tasks*`, `/api/v2/plans*`, GET `/api/v2/agenda`, `/api/v2/occurrences/*`, `/api/v2/confirmations/*`, `/api/v2/history`, `/api/v2/reminder-source`, `/api/v2/changes`, `/api/v2/webhooks*` и `/api/oauth/userinfo`. `/integration/v1` и всё остальное для приложения закрыто. Всё остальное → 403 «Not available to connected apps». Просроченный или отозванный токен → 401.
 GET /api/v2/grants — только сессия → `[{id, client_id, client_name, scopes, readable_calendar_ids, app_calendar_id, created_at, last_used_at}]`. DELETE /api/v2/grants/{id} → `{id, revoked: true}`, токены гаснут сразу. Чужое разрешение → 404.
 
 ## Events v2 (wave 3)
@@ -77,7 +78,31 @@ PATCH /api/v2/events/{id}[?occurrence_key=&scope=this|thisAndFollowing|series] �
 Пара (календарь приложения, приложение, `external_id`) уникальна. Повторный POST с тем же `external_id` обновляет найденное событие и отвечает 200, а не создаёт новое (201). `If-Match` при этом необязателен: если передан, устаревшая ревизия → 409.
 Если пользователь удалил это событие, повторный POST → 409 `conflict` с `details: {entity_id, deleted: true}`: событие не воскрешается.
 Повтор с тем же `Idempotency-Key` возвращает исходный результат.
-Пока нет (позже): `tasks`/`plans` v2, `freebusy`, участники.
+
+**Tasks и plans (wave 5)** — те же правила, что у событий:
+- `GET/POST /api/v2/tasks`, `GET/PATCH/DELETE /api/v2/tasks/{id}`;
+- то же для `/api/v2/plans`;
+- `external_id` с той же логикой (повторный POST обновляет, удалённое не воскрешает).
+
+Список `GET /api/v2/tasks?calendar_id=&from=&to=` отдаёт задачи на эти дни, просроченные и без даты; выполненные в него не попадают.
+
+**Действия (wave 5).** `POST /api/v2/{events|tasks|plans}/{id}/{confirm|complete|restore}`. Тело — payload, как у `/integration/v1/commands`. Нужен `If-Match`; необязательны `Idempotency-Key`, `occurrence_key`, `scope`.
+- `confirm` — «было/не было»: `{status: occurred|not_occurred|revoked, happened_date}`;
+- `complete` — выполнить задачу, только tasks;
+- `restore` — вернуть удалённое.
+
+Приложение может делать это только со своими записями (иначе 403).
+
+**Чтение (wave 5).**
+- `GET /api/v2/agenda?calendar_id=&from=&to=` — как `/integration/v1/agenda` (`items`, `overdue_tasks`, `undated_tasks`, `smart_day` …), у элементов есть `external_id`.
+- `GET /api/v2/occurrences/{entity_id}?occurrence_key=`.
+- `GET /api/v2/confirmations/{entity_id}?occurrence_key=` → `{confirmation}`.
+- `GET /api/v2/history?from=&to=&cursor=&limit≤100` — отметки «было/не было».
+- `GET /api/v2/reminder-source?calendar_id=&from=&to=` (1–7 дней).
+
+Приложению для чтения нужен `events.read`, и оно видит только доступные ему календари. Запись в чужом календаре → 404; история фильтруется по этим календарям. Интерфейсу (cookie) для истории нужен `calendar:history`.
+
+Пока нет (позже): `freebusy`, участники.
 
 ## Sync (D37, wave 4)
 GET /api/v2/changes?cursor=&limit≤500 → `{items, next_cursor, complete, server_now}`.
@@ -90,6 +115,13 @@ DELETE /api/v2/webhooks/{id} → `{id, deleted: true}`; чужой → 404.
 Свои правки приложения не вызывают уведомлений. Много изменений подряд дают одно уведомление.
 Неудача (не 2xx, таймаут 5 с, редирект, адрес не публичный) → повторы через 30 с, 1, 5, 15, 30 мин, затем раз в час, до 24 часов. После этого уведомление снимается; подписка остаётся, лента хранит всё.
 Отзыв подключения останавливает уведомления.
+
+## Folio bridge switch (wave 5, §8.4)
+`FOLIO_BRIDGE_ENABLED` (по умолчанию `true`). При `false`:
+- запросы со старым JWT моста (`/api/integration/v1/*` и любые другие) → 401;
+- `GET /api/auth/folio` → 401.
+
+OAuth-токены, сессии и вход по логину продолжают работать. Выключать, когда в Folio не осталось пользователей на старой схеме. (Сервисный токен `FOLIO_SERVICE_TOKEN` в коде уже не проверяется.)
 
 ## Stable errors
 validation_error, clarification_required, not_found, ambiguous_target, draft_expired, draft_already_completed, ai_provider_error, transcription_error, database_error, unauthorized, forbidden, conflict, unavailable, rate_limited.
