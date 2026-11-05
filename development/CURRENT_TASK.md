@@ -23,7 +23,7 @@ Known limits:
 - the login rate limiter and the token rate limiter are in-memory (per process).
 
 Not done:
-- migrations and the backend suite checked on MariaDB 13.0.2 and on `mariadb:11` (11.8.9) (2026-11-06); open: `external_id` is case-insensitive on MariaDB's default collation;
+- migrations and the backend suite checked on MariaDB 13.0.2 and on `mariadb:11` (11.8.9) (2026-11-06); `external_id` made case-sensitive there (`utf8mb4_bin`);
 - the separate security review after wave 3 has not been run;
 - nothing pushed or deployed (push to `main` auto-deploys, D20).
 

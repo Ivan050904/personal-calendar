@@ -19,6 +19,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.db.session import Base
 
+# An app's own id is opaque and case-sensitive: `Lesson-1` and `lesson-1` are different records.
+# MySQL/MariaDB default collations ignore case, so the column compares bytes there (SQLite already does).
+EXTERNAL_ID = String(255).with_variant(mysql.VARCHAR(255, collation='utf8mb4_bin'), 'mysql', 'mariadb')
+
 
 def utcnow() -> datetime:
     return datetime.utcnow()
@@ -80,7 +84,7 @@ class EventModel(Base, TimestampMixin):
     recurrence_rule_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # D37: the app's own id for this event; (calendar, client, external_id) is unique.
     source_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(EXTERNAL_ID, nullable=True)
     __table_args__ = (UniqueConstraint('calendar_id', 'source_client_id', 'external_id', name='uq_events_external_id'),)
 
 
@@ -126,7 +130,7 @@ class PlanModel(Base, TimestampMixin):
     color: Mapped[str] = mapped_column(String(32), nullable=False)
     # D37: the app's own id (wave 5); (calendar, client, external_id) is unique.
     source_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(EXTERNAL_ID, nullable=True)
     __table_args__ = (UniqueConstraint('calendar_id', 'source_client_id', 'external_id', name='uq_plans_external_id'),)
 
 
@@ -152,7 +156,7 @@ class TaskModel(Base, TimestampMixin):
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # D37: the app's own id (wave 5); (calendar, client, external_id) is unique.
     source_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(EXTERNAL_ID, nullable=True)
     __table_args__ = (UniqueConstraint('calendar_id', 'source_client_id', 'external_id', name='uq_tasks_external_id'),)
 
 

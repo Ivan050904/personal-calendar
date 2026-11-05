@@ -59,6 +59,17 @@ def test_retry_with_same_idempotency_key_replays(user, server):
     assert len(listed.json()["items"]) == 1
 
 
+def test_external_ids_differing_only_in_case_are_different_events(user, server):
+    """External ids are opaque and case-sensitive on every database (MariaDB's default collation is not)."""
+    _, _, tokens = connect(user, server)
+    auth = bearer(tokens["access_token"])
+    upper = server.post("/api/v2/events", json=lesson("Lesson-7", "Первый"), headers=auth)
+    lower = server.post("/api/v2/events", json=lesson("lesson-7", "Второй"), headers=auth)
+    assert (upper.status_code, lower.status_code) == (201, 201), lower.text
+    assert upper.json()["id"] != lower.json()["id"]
+    assert server.get(f"/api/v2/events/{upper.json()['id']}", headers=auth).json()["title"] == "Первый"
+
+
 def test_external_id_upsert_respects_revision(user, server):
     _, _, tokens = connect(user, server)
     auth = bearer(tokens["access_token"])

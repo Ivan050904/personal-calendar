@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Case-sensitive external_id on MySQL/MariaDB (2026-11-06)
+
+- Owner's decision: an app's `external_id` is opaque and case-sensitive. `Lesson-1` and `lesson-1` are two records on every database.
+- The `external_id` columns of events, tasks and plans use `utf8mb4_bin` on MySQL/MariaDB (migration `4b5c6d7e8f96`, model type `EXTERNAL_ID`). SQLite already compared bytes. The downgrade fails on the unique key if ids that differ only in case exist; review that data first.
+- New test `test_external_ids_differing_only_in_case_are_different_events`. On `mariadb:11` it fails without the fix and passes with it.
+- Verified on `mariadb:11` (11.8.9):
+  - migrations up, down to `c3d4e5f60718`, and up again;
+  - an old-schema database with data upgraded to `4b5c6d7e8f96`, all rows intact; the three columns are `utf8mb4_bin` and the unique keys are kept;
+  - backend 195 passed, 1 skipped.
+- Verified on SQLite: backend 195 passed, 1 skipped; migrations up, down and up again.
+
 ### Check on the production image `mariadb:11` (2026-11-06)
 
 - Docker, `mariadb:11` → 11.8.9, started like `scripts/deploy_calendar.py` does; databases with server defaults (`utf8mb4_uca1400_ai_ci`).
