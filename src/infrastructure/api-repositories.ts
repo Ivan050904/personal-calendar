@@ -19,7 +19,7 @@ type StoreName =
   | 'categories'
   | 'reminders'
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
+export async function calendarTransport<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
     credentials: 'include',
@@ -38,8 +38,11 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (response.status === 204) {
     return undefined as T
   }
-  // MySQL/JSON uses null; domain filters use undefined (e.g. deletedAt, dueDate).
-  return stripJsonNulls(await response.json()) as T
+  return await response.json() as T
+}
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  return stripJsonNulls(await calendarTransport(path, init)) as T
 }
 
 function stripJsonNulls(value: unknown): unknown {

@@ -1,0 +1,14 @@
+{
+  "contract_version": 2,
+  "weekdays": "ISO Monday=1 Sunday=7",
+  "dst_gap_policy": "skip",
+  "dst_fold_policy": "earlier",
+  "cases": [
+    {"id":"berlin-fall-week","timezone":"Europe/Berlin","from":"2026-10-19","to":"2026-10-25","utc_hours":169},
+    {"id":"midnight-overlap","timezone":"UTC","start_at":"2026-10-07T23:30:00Z","end_at":"2026-10-08T00:30:00Z","visible_days":["2026-10-07","2026-10-08"]},
+    {"id":"all-day-exclusive","start_date":"2026-10-08","end_date_exclusive":"2026-10-11","visible_days":["2026-10-08","2026-10-09","2026-10-10"]},
+    {"id":"monthly-clamp","timezone":"UTC","original":"2026-01-31T09:00","expected":"2026-02-28T09:00"},
+    {"id":"berlin-gap","timezone":"Europe/Berlin","original":"2026-03-28T02:30","count":2,"expected":["2026-03-28T01:30:00Z","2026-03-30T00:30:00Z"]},
+    {"id":"berlin-fold","timezone":"Europe/Berlin","original":"2026-10-24T02:30","expected":"2026-10-25T00:30:00Z"}
+  ]
+}

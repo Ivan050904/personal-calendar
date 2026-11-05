@@ -71,6 +71,7 @@ describe('day calendar view', () => {
 describe('tasks section', () => {
   it('shows composer and buckets, then lists a created undated task', async () => {
     const user = userEvent.setup()
+    let completedFromRevision: number | undefined
     const created: { title: string; dueDate?: string }[] = []
     const undated: Array<{
       id: string
@@ -103,6 +104,7 @@ describe('tasks section', () => {
             title: draft.title,
             dueDate: draft.dueDate,
             completed: false,
+            revision: 4,
             createdAt: '2026-09-17T08:00:00.000Z',
             updatedAt: '2026-09-17T08:00:00.000Z',
           }
@@ -115,7 +117,12 @@ describe('tasks section', () => {
         listTasksForDate: emptyList,
         listTasksDueOnOrOverdue: emptyList,
         moveTask: async () => { throw new Error('unused') },
-        toggleCompleted: async () => { throw new Error('unused') },
+        toggleCompleted: async (id: string, snapshot?: { revision?: number }) => {
+          completedFromRevision = snapshot?.revision
+          const task = undated.find((item) => item.id === id)!
+          task.completed = true
+          return task
+        },
         getRecurrenceRule: async () => undefined,
       },
       lists: { calendar, listAll: async () => [], create: async () => { throw new Error('unused') }, rename: async () => { throw new Error('unused') }, softDelete: async () => undefined, addItem: async () => { throw new Error('unused') }, updateItem: async () => { throw new Error('unused') }, deleteItem: async () => undefined, toggleItem: async () => { throw new Error('unused') }, reorderItems: async () => [] },
@@ -152,6 +159,8 @@ describe('tasks section', () => {
     expect(created[0]?.title).toBe('Купить молоко')
     expect(created[0]?.dueDate).toBeUndefined()
     expect(await screen.findByText('Купить молоко')).toBeTruthy()
+    await user.click(within(screen.getByRole('region', { name: 'Без даты' })).getByRole('checkbox'))
+    expect(completedFromRevision).toBe(4)
   })
 })
 

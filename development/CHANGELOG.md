@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Calendar platform spec draft (2026-11-05)
+
+- Added `docs/18_CALENDAR_PLATFORM.md`: own accounts, OAuth 2.0 (Authorization Code + PKCE) for connected apps, multiple calendars with per-app permissions, sync (external IDs, changes feed, webhooks), attendees for shared events, Folio migration, waves 1–6. Draft only: proposed D34–D38 not yet in `17_DECISIONS.md`; no code changes.
+
+### Calendar review closure (2026-10-10)
+
+- Historical completion corrections preserve the next open rolling task and its stable confirmation ID.
+- Splitting a count-limited series carries only remaining valid occurrences, including DST gap policy.
+- Exact moved-occurrence lookup derives the date in the source IANA zone.
+- Task/plan editors and task actions send their displayed base revision/original due; stale tabs receive conflicts.
+- Async plan/category snapshots discard responses after effect teardown; removed compiler-incompatible week memoization and unused compatibility arguments without relaxing lint rules.
+- Verified: backend95 passed/1 real-AI skip; frontend83 passed; build/typecheck/lint exit0 (four existing lint warnings). Local new calendar only; old data import and deployment deferred.
+
+### Calendar integration local R0–R5 (2026-10-09)
+
+- Synthetic isolated tests; owner-bound principals/sessions, scoped bridge and opaque launch exchange.
+- UTC/all-day server projections, moved exceptions, stable occurrence IDs and bounded pagination.
+- Atomic revision commands/receipts, rolling task confirmations, history/change/reminder source reads.
+- API UI uses server projections/commands; device startup preserves source timezone; principal switch remounts private state; exact launch targets and 10/20 minute presets.
+- Production rollout, legacy import and personal database migration were not performed.
+
 ### Changed (Mobile sidebar + Tasks UX)
 
 - Mobile: hamburger opens full left sidebar drawer; bottom tabs kept (D29).

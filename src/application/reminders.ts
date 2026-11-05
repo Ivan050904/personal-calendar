@@ -4,7 +4,7 @@ import { ValidationError } from '../domain/validation'
 import type { EntityRepository } from './repositories'
 
 /** MVP reminder offsets from docs/07_NOTIFICATIONS.md */
-export const REMINDER_OFFSETS_MINUTES = [5, 15, 30, 60, 1440] as const
+export const REMINDER_OFFSETS_MINUTES = [5, 10, 15, 20, 30, 60, 1440] as const
 export type ReminderOffset = (typeof REMINDER_OFFSETS_MINUTES)[number]
 
 export interface ReminderRepository extends EntityRepository<Reminder> {

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Event, Plan, Weekday } from '../domain/models'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { Event, Plan, Task, Weekday } from '../domain/models'
 import {
   allDayBounds,
   dateKey,
@@ -15,6 +15,10 @@ import {
   type RecurrenceDraft,
 } from '../application/day-calendar'
 import { weekdayOf } from '../application/recurrence'
+import { resolveCalendarTarget } from '../application/calendar-deep-link'
+import { exactOccurrence } from '../infrastructure/calendar-occurrence-api'
+import { occurrenceEvent } from '../infrastructure/api-calendar-services'
+import { shouldUseApiRepository } from '../infrastructure/api-repositories'
 import type { PlansService } from '../application/plans'
 import type { TasksService } from '../application/tasks'
 import type { LocalListsService } from '../application/lists'
@@ -204,6 +208,32 @@ export function App({
   const dayTimelineRef = useRef<HTMLElement | null>(null)
   const coarsePointer = useCoarsePointer()
   const allowDayDrag = !coarsePointer
+
+  useEffect(() => {
+    if (!shouldUseApiRepository()) return
+    let active = true
+    void (async () => {
+      try {
+        const target = resolveCalendarTarget(new URLSearchParams(window.location.search), calendar.calendar.id)
+        if (!target) return
+        const row = await exactOccurrence(target.entityId, target.occurrenceKey)
+        if (!active) return
+        if (row.calendar_id !== calendar.calendar.id || row.kind !== target.kind) throw new Error('Запись недоступна')
+        const date = row.due_date ?? row.start_date ?? (row.start_at ? dateKey(row.start_at, calendar.calendar.timezone) : undefined)
+        if (date) setSelectedDate(date)
+        if (target.kind === 'event') {
+          const event = occurrenceEvent(row)
+          setSection('calendar'); setEditing(event)
+          setDraft({ title: event.title, description: event.description, startAt: event.startAt, endAt: event.endAt, color: event.color, allDay: event.allDay })
+        }
+        if (target.kind === 'plan') { setSection('calendar'); setFocusPlanId(row.entity_id); setDockOpen(true) }
+        if (target.kind === 'task') { setSection('tasks'); setStatus(`Задача: ${row.title}`) }
+      } catch {
+        if (active) { setSection('calendar'); setStatus('Запись удалена или недоступна') }
+      }
+    })()
+    return () => { active = false }
+  }, [calendar])
 
   const goSection = (id: Section) => {
     setSection(id)
@@ -1204,8 +1234,8 @@ function TaskBucket({
   tasks: Awaited<ReturnType<TasksService['listUndatedTasks']>>
   dueLabel?: string
   repeatLabels?: Record<string, string>
-  onToggle: (id: string) => void
-  onDelete?: (id: string) => void
+  onToggle: (task: Task) => void
+  onDelete?: (task: Task) => void
 }) {
   return (
     <section className="task-bucket" aria-label={heading}>
@@ -1224,8 +1254,8 @@ function TaskBucket({
               completed={task.completed}
               dueLabel={dueLabel}
               repeatLabel={repeatLabels?.[task.id]}
-              onToggle={() => onToggle(task.id)}
-              onDelete={onDelete === undefined ? undefined : () => onDelete(task.id)}
+              onToggle={() => onToggle(task)}
+              onDelete={onDelete === undefined ? undefined : () => onDelete(task)}
             />
           ))}
         </ul>
@@ -1246,6 +1276,7 @@ function TodayTasksPanel({ services, selectedDate, boardRevision = 0 }: { servic
   const today = dateKey(new Date(), timezone)
   const [tasks, setTasks] = useState<Awaited<ReturnType<TasksService['listTasksForDate']>>>([])
   const [repeatLabels, setRepeatLabels] = useState<Record<string, string>>({})
+  const [actionError, setActionError] = useState('')
   const listForDay = selectedDate === today
     ? (date: string) => services.tasks.listTasksDueOnOrOverdue(date)
     : (date: string) => services.tasks.listTasksForDate(date)
@@ -1269,6 +1300,7 @@ function TodayTasksPanel({ services, selectedDate, boardRevision = 0 }: { servic
   return (
     <section className="side-panel tasks-panel is-dock" aria-label="Задачи на день">
       <h2>Задачи на день</h2>
+      {actionError && <p role="alert">{actionError}</p>}
       {tasks.length === 0 ? (
         <p className="empty-state">Нет задач на эту дату</p>
       ) : (
@@ -1281,7 +1313,8 @@ function TodayTasksPanel({ services, selectedDate, boardRevision = 0 }: { servic
               dueLabel={task.dueDate !== undefined && task.dueDate < selectedDate ? 'Просрочено' : undefined}
               repeatLabel={repeatLabels[task.id]}
               onToggle={() => {
-                void services.tasks.toggleCompleted(task.id).then(() => listForDay(selectedDate).then(setTasks))
+                setActionError('')
+                void services.tasks.toggleCompleted(task.id, task).then(() => listForDay(selectedDate).then(setTasks)).catch((error: Error) => setActionError(error.message))
               }}
             />
           ))}
@@ -1310,29 +1343,42 @@ function PlansPanel({
   const [plans, setPlans] = useState<Awaited<ReturnType<PlansService['listPlansInRange']>>>([])
   const [progress, setProgress] = useState<Record<string, { completed: number; total: number; percentage: number }>>({})
   const [tasksByPlan, setTasksByPlan] = useState<Record<string, Awaited<ReturnType<PlansService['listTasks']>>>>({})
-  const [expanded, setExpanded] = useState<string | undefined>()
+  const [expanded, setExpanded] = useState<string | undefined>(focusPlanId)
+  const [previousFocus, setPreviousFocus] = useState(focusPlanId)
+  if (focusPlanId !== previousFocus) {
+    setPreviousFocus(focusPlanId)
+    if (focusPlanId) setExpanded(focusPlanId)
+  }
   const [title, setTitle] = useState('')
   const [startHour, setStartHour] = useState('10')
   const [newTask, setNewTask] = useState('')
+  const [actionError, setActionError] = useState('')
 
-  const reload = async () => {
+  const readPlans = useCallback(async () => {
     const items = await services.plans.listPlansInRange(selectedDate, selectedDate)
-    setPlans(items)
     const nextProgress: Record<string, { completed: number; total: number; percentage: number }> = {}
     const nextTasks: Record<string, Awaited<ReturnType<PlansService['listTasks']>>> = {}
     for (const plan of items) {
       nextProgress[plan.id] = await services.plans.progress(plan.id)
       nextTasks[plan.id] = await services.plans.listTasks(plan.id)
     }
-    setProgress(nextProgress)
-    setTasksByPlan(nextTasks)
-  }
+    return { items, nextProgress, nextTasks }
+  }, [services.plans, selectedDate])
+  const applyPlans = useCallback((snapshot: Awaited<ReturnType<typeof readPlans>>) => {
+    setPlans(snapshot.items)
+    setProgress(snapshot.nextProgress)
+    setTasksByPlan(snapshot.nextTasks)
+  }, [])
+  const reload = async () => applyPlans(await readPlans())
 
-  useEffect(() => { void reload() }, [services.plans, selectedDate, boardRevision])
+  useEffect(() => {
+    let active = true
+    void readPlans().then(snapshot => { if (active) applyPlans(snapshot) })
+    return () => { active = false }
+  }, [readPlans, applyPlans, boardRevision])
 
   useEffect(() => {
     if (!focusPlanId) return
-    setExpanded(focusPlanId)
     onFocusConsumed?.()
   }, [focusPlanId, onFocusConsumed])
 
@@ -1350,6 +1396,7 @@ function PlansPanel({
   return (
     <section className="side-panel" aria-label="Планы">
       <h2>Планы</h2>
+      {actionError && <p role="alert">{actionError}</p>}
       <div className="composer-row">
         <label>
           Название плана
@@ -1462,10 +1509,11 @@ function PlansPanel({
                 className="btn btn-ghost"
                 onClick={() => {
                   if (!window.confirm('Удалить план?')) return
-                  void services.plans.deletePlan(plan.id).then(async () => {
+                  setActionError('')
+                  void services.plans.deletePlan(plan.id, plan.revision).then(async () => {
                     await reload()
                     onChanged?.()
-                  })
+                  }).catch((error: Error) => setActionError(error.message))
                 }}
               >
                 Удалить план
@@ -1570,6 +1618,7 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
   const [todayTasks, setTodayTasks] = useState<Awaited<ReturnType<TasksService['listTasksDueOnOrOverdue']>>>([])
   const [focusTasks, setFocusTasks] = useState<Awaited<ReturnType<TasksService['listTasksForDate']>>>([])
   const [repeatLabels, setRepeatLabels] = useState<Record<string, string>>({})
+  const [actionError, setActionError] = useState('')
   const showFocusSection = dueDate !== '' && dueDate !== today
 
   const loadRepeatLabels = async (tasks: Awaited<ReturnType<TasksService['listUndatedTasks']>>[]) => {
@@ -1619,6 +1668,7 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
   return (
     <section className="side-panel tasks-panel is-flat" aria-label="Задачи">
       <h1>Задачи</h1>
+      {actionError && <p role="alert">{actionError}</p>}
 
       <form
         className="task-composer"
@@ -1699,16 +1749,16 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
           empty="Пока пусто"
           tasks={undated}
           repeatLabels={repeatLabels}
-          onToggle={(id) => { void services.tasks.toggleCompleted(id).then(refresh) }}
-          onDelete={(id) => { void services.tasks.deleteTask(id).then(refresh) }}
+          onToggle={(task) => { setActionError(''); void services.tasks.toggleCompleted(task.id, task).then(refresh).catch((error: Error) => setActionError(error.message)) }}
+          onDelete={(task) => { setActionError(''); void services.tasks.deleteTask(task.id, task.revision).then(refresh).catch((error: Error) => setActionError(error.message)) }}
         />
         <TaskBucket
           heading="Сегодня"
           empty="На сегодня задач нет"
           tasks={todayTasks}
           repeatLabels={repeatLabels}
-          onToggle={(id) => { void services.tasks.toggleCompleted(id).then(refresh) }}
-          onDelete={(id) => { void services.tasks.deleteTask(id).then(refresh) }}
+          onToggle={(task) => { setActionError(''); void services.tasks.toggleCompleted(task.id, task).then(refresh).catch((error: Error) => setActionError(error.message)) }}
+          onDelete={(task) => { setActionError(''); void services.tasks.deleteTask(task.id, task.revision).then(refresh).catch((error: Error) => setActionError(error.message)) }}
         />
         {showFocusSection && (
           <TaskBucket
@@ -1717,8 +1767,8 @@ function TasksSection({ services, boardRevision = 0 }: { services: AppServices; 
             tasks={focusTasks}
             dueLabel={focusHeading}
             repeatLabels={repeatLabels}
-            onToggle={(id) => { void services.tasks.toggleCompleted(id).then(refresh) }}
-            onDelete={(id) => { void services.tasks.deleteTask(id).then(refresh) }}
+            onToggle={(task) => { setActionError(''); void services.tasks.toggleCompleted(task.id, task).then(refresh).catch((error: Error) => setActionError(error.message)) }}
+            onDelete={(task) => { setActionError(''); void services.tasks.deleteTask(task.id, task.revision).then(refresh).catch((error: Error) => setActionError(error.message)) }}
           />
         )}
       </div>
@@ -1943,7 +1993,11 @@ function SettingsSection({
   const reloadCategories = async () => {
     setCategories(await services.categories.list())
   }
-  useEffect(() => { void reloadCategories() }, [services.categories])
+  useEffect(() => {
+    let active = true
+    void services.categories.list().then(items => { if (active) setCategories(items) })
+    return () => { active = false }
+  }, [services.categories])
 
   return (
     <section className="side-panel settings-panel">

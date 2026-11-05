@@ -8,15 +8,19 @@ export async function apiFetch(input: string, init?: RequestInit): Promise<Respo
   })
 }
 
-export async function fetchAuthMe(): Promise<{ authenticated: boolean; username: string | null }> {
+export interface CalendarIdentity { authenticated: boolean; username: string | null; principal_id: string | null; folio_user_id: string | null; session_id: string | null }
+export async function fetchAuthMe(): Promise<CalendarIdentity> {
   const response = await apiFetch('/api/auth/me')
   if (!response.ok) {
-    return { authenticated: false, username: null }
+    return { authenticated: false, username: null, principal_id: null, folio_user_id: null, session_id: null }
   }
-  const body = (await response.json()) as { authenticated?: boolean; username?: string | null }
+  const body = (await response.json()) as Partial<CalendarIdentity>
   return {
     authenticated: Boolean(body.authenticated),
     username: body.username ?? null,
+    principal_id: body.principal_id ?? null,
+    folio_user_id: body.folio_user_id ?? null,
+    session_id: body.session_id ?? null,
   }
 }
 

@@ -14,6 +14,7 @@ import {
 } from './infrastructure/indexed-db-repositories'
 import { createApiRepositories, shouldUseApiRepository } from './infrastructure/api-repositories'
 import { fetchAuthMe, logout } from './infrastructure/auth'
+import { ApiDayCalendarService, ApiTasksService, ApiPlansService } from './infrastructure/api-calendar-services'
 import { App, type AppServices } from './presentation/App'
 import { LoginPage } from './presentation/LoginPage'
 import type { Reminder } from './domain/models'
@@ -44,7 +45,9 @@ async function loadRepositories(): Promise<{ repositories: Repositories; reminde
         list: () => repositories.reminders.list(),
         put: (entity) => repositories.reminders.put(entity),
         delete: async (id) => {
-          await fetch(`/api/entities/reminders/${id}`, { method: 'DELETE', credentials: 'include' })
+          const row = await repositories.reminders.get(id)
+          const response = await fetch(`/api/entities/reminders/${id}`, { method: 'DELETE', credentials: 'include', headers: { 'If-Match': String(row?.revision ?? '') } })
+          if (!response.ok) throw new Error('Не удалось удалить напоминание')
         },
       },
     }
@@ -78,14 +81,14 @@ function AppBoot({ onLogout }: { onLogout?: () => void }) {
         if (cancelled) return
         setReady({
           services: {
-            calendar: new LocalDayCalendarService(
+            calendar: shouldUseApiRepository() ? new ApiDayCalendarService(calendar) : new LocalDayCalendarService(
               calendar,
               repositories.events,
               repositories.recurrenceRules,
               repositories.eventExceptions,
             ),
-            plans: new LocalPlansService(calendar, repositories.plans, repositories.planTasks),
-            tasks: new LocalTasksService(calendar, repositories.tasks, repositories.recurrenceRules),
+            plans: shouldUseApiRepository() ? new ApiPlansService(calendar, repositories.plans, repositories.planTasks) : new LocalPlansService(calendar, repositories.plans, repositories.planTasks),
+            tasks: shouldUseApiRepository() ? new ApiTasksService(calendar, repositories.tasks, repositories.recurrenceRules) : new LocalTasksService(calendar, repositories.tasks, repositories.recurrenceRules),
             lists: new LocalListsService(calendar, repositories.lists, repositories.listItems),
             categories: new LocalCategoriesService(calendar, repositories.categories),
             reminders,
@@ -128,16 +131,26 @@ function AppBoot({ onLogout }: { onLogout?: () => void }) {
 function Root() {
   const useApi = shouldUseApiRepository()
   const [gate, setGate] = useState<'loading' | 'login' | 'app'>(useApi ? 'loading' : 'app')
+  const [identity, setIdentity] = useState<string | null>(null)
 
   useEffect(() => {
     if (!useApi) return
     let cancelled = false
-    void fetchAuthMe().then((me) => {
+    const refreshIdentity = () => { void fetchAuthMe().then((me) => {
       if (cancelled) return
+      setIdentity(me.principal_id)
       setGate(me.authenticated ? 'app' : 'login')
-    })
+    }) }
+    refreshIdentity()
+    window.addEventListener('focus', refreshIdentity)
+    window.addEventListener('pageshow', refreshIdentity)
+    const onVisibility = () => { if (document.visibilityState === 'visible') refreshIdentity() }
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
       cancelled = true
+      window.removeEventListener('focus', refreshIdentity)
+      window.removeEventListener('pageshow', refreshIdentity)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [useApi])
 
@@ -150,11 +163,12 @@ function Root() {
   }
 
   if (gate === 'login') {
-    return <LoginPage onSuccess={() => setGate('app')} />
+    return <LoginPage onSuccess={() => { void fetchAuthMe().then(me => { setIdentity(me.principal_id); setGate(me.authenticated ? 'app' : 'login') }) }} />
   }
 
   return (
     <AppBoot
+      key={identity ?? 'standalone'}
       onLogout={
         useApi
           ? () => {

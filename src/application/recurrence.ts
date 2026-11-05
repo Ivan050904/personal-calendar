@@ -53,8 +53,16 @@ function localTimeOf(startAt: string, timezone: string): string {
   return isoToZonedInput(startAt, timezone).slice(11)
 }
 
-function buildOccurrenceStart(date: string, time: string, timezone: string): string {
-  return zonedInputToIso(`${date}T${time}`, timezone)
+function buildOccurrenceStart(date: string, time: string, timezone: string): string | undefined {
+  const local = `${date}T${time}`
+  const naive = Date.parse(`${local}Z`)
+  const offsets = new Set([-36, -12, 0, 12, 36].map(hours => {
+    const sample = naive + hours * 3600000
+    return Date.parse(`${isoToZonedInput(new Date(sample).toISOString(), timezone)}Z`) - sample
+  }))
+  const valid = [...offsets].map(offset => new Date(naive - offset).toISOString())
+    .filter(instant => isoToZonedInput(instant, timezone) === local).sort()
+  return valid[0] // Gap skips; fold selects the earlier instant.
 }
 
 function matchesWeekdays(date: string, timezone: string, weekdays: Weekday[]): boolean {
@@ -97,7 +105,7 @@ function isCandidate(
       return weeksBetween(seriesStart, date) % interval === 0
     }
     case 'weekdays': {
-      if (!matchesWeekdays(date, timezone, rule.weekdays)) return false
+      if (!matchesWeekdays(date, timezone, rule.weekdays.length ? rule.weekdays : [1, 2, 3, 4, 5])) return false
       return weeksBetween(seriesStart, date) % interval === 0
     }
     case 'monthly': {
@@ -158,22 +166,25 @@ export function generateOccurrences(
   let emitted = 0
   let cursor = seriesStart
   // Hard bound: stop scanning far past the visible window (and past untilDate when set).
-  const scanEnd = rule.untilDate !== undefined && rule.untilDate < rangeEnd ? rule.untilDate : rangeEnd
+  const lastExceptionDate = [...exceptionByKey.keys()].map(key => key.slice(0, 10)).sort().at(-1) ?? rangeEnd
+  const maximum = lastExceptionDate > rangeEnd ? lastExceptionDate : rangeEnd
+  const scanEnd = rule.untilDate !== undefined && rule.untilDate < maximum ? rule.untilDate : maximum
   const maxScanDays = Math.max(1, Math.floor((Date.parse(`${scanEnd}T12:00:00Z`) - Date.parse(`${seriesStart}T12:00:00Z`)) / 86_400_000) + 2)
   let scanned = 0
 
   while (cursor <= scanEnd && scanned <= maxScanDays) {
+    if (scanned >= 10000) throw new Error('range_too_dense')
     if (isCandidate(event, rule, cursor)) {
-      emitted += 1
-      if (rule.occurrenceCount !== undefined && emitted > rule.occurrenceCount) break
-      if (rule.untilDate !== undefined && cursor > rule.untilDate) break
-
-      if (cursor >= rangeStart && cursor <= rangeEnd) {
         const startAt = buildOccurrenceStart(cursor, time, timezone)
+        if (startAt !== undefined) {
+        emitted += 1
+        if (rule.occurrenceCount !== undefined && emitted > rule.occurrenceCount) break
         const endAt = new Date(Date.parse(startAt) + durationMs).toISOString()
-        const key = makeOccurrenceKey(startAt, timezone)
+        const key = `${cursor}T${time}`
         const projection = applyExceptionToProjection(event, key, startAt, endAt, exceptionByKey.get(key))
-        if (projection !== undefined) results.push(projection)
+        const low = Date.parse(zonedInputToIso(`${rangeStart}T00:00`, timezone))
+        const high = Date.parse(zonedInputToIso(`${addDaysIso(rangeEnd, 1)}T00:00`, timezone))
+        if (projection !== undefined && Date.parse(projection.event.startAt) < high && Date.parse(projection.event.endAt) > low) results.push(projection)
       }
     }
     cursor = addDaysIso(cursor, 1)

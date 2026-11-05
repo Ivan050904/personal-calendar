@@ -45,8 +45,9 @@ def compute_missing_fields(operation: str, entity_type: str | None, payload: dic
 
 
 class DraftService:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, actor=None) -> None:
         self.session = session
+        self.actor = actor
 
     def create_from_action(
         self,
@@ -71,13 +72,27 @@ class DraftService:
             raise AppError("validation_error", "Unsupported intent for draft", status_code=422)
 
         now = datetime.utcnow()
+        target = action.get('targetSelector') or action.get('target_selector')
+        if self.actor and intent in {'UPDATE','DELETE'}:
+            from app.infrastructure.repositories import Repositories
+            from app.application.target_resolver import TargetResolver
+            if target and target.get('id'):
+                repos = Repositories(self.session,self.actor)
+                repo = {'event':repos.events,'task':repos.tasks,'plan':repos.plans,'list':repos.lists}.get(entity_type)
+                entity = repo.get(target['id']) if repo else None
+                if not entity:
+                    raise AppError('not_found','Target not found',status_code=404)
+                target = {**target,'revision':entity['revision'],'entityType':entity_type}
+            else:
+                target = TargetResolver(self.session,self.actor).resolve(target)
         draft = DraftModel(
+            owner_id=self.actor.principal_id if self.actor else None,
             id=str(uuid4()),
             conversation_id=conversation_id or str(uuid4()),
             operation=str(intent),
             entity_type=action.get("entityType") or action.get("entity_type"),
             payload=action.get("payload") or {},
-            target=action.get("targetSelector") or action.get("target_selector"),
+            target=target,
             missing_fields=missing,
             status=status,
             clarification=action.get("clarification"),
@@ -167,10 +182,10 @@ class DraftService:
         if draft.operation == "CLARIFY":
             # Safety net: ready clarify drafts are create proposals.
             draft.operation = "CREATE"
-        executor = DomainExecutor(self.session)
+        executor = DomainExecutor(self.session, self.actor)
         draft_dict = self.to_dict(draft)
         if draft.operation in {"UPDATE", "DELETE"} and not (draft_dict.get("target") or {}).get("id"):
-            resolver = TargetResolver(self.session)
+            resolver = TargetResolver(self.session, self.actor)
             resolved = resolver.resolve(draft_dict.get("target"))
             draft.target = resolved
             draft_dict["target"] = resolved
@@ -186,6 +201,7 @@ class DraftService:
         now = datetime.utcnow()
         rows = self.session.scalars(
             select(DraftModel)
+            .where(DraftModel.owner_id == self.actor.principal_id if self.actor else True)
             .where(DraftModel.status.in_(tuple(READY_STATUSES)))
             .where(DraftModel.expires_at < now)
         ).all()
@@ -198,7 +214,7 @@ class DraftService:
 
     def _require(self, draft_id: str) -> DraftModel:
         draft = self.session.get(DraftModel, draft_id)
-        if draft is None:
+        if draft is None or (self.actor and draft.owner_id != self.actor.principal_id):
             raise AppError("not_found", "Draft not found", status_code=404)
         if draft.status in READY_STATUSES and draft.expires_at and draft.expires_at < datetime.utcnow():
             draft.status = "expired"

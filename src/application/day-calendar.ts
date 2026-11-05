@@ -46,9 +46,7 @@ export class LocalDayCalendarService implements DayCalendarService {
   ) {}
 
   async listEvents(date: string): Promise<Event[]> {
-    return (await this.listEventsInRange(date, date)).filter(
-      (event) => dateKey(event.startAt, event.timezone || this.calendar.timezone) === date,
-    )
+    return this.listEventsInRange(date, date)
   }
 
   async listEventsInRange(startDate: string, endDate: string): Promise<Event[]> {

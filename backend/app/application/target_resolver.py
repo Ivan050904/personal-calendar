@@ -10,8 +10,8 @@ from app.infrastructure.repositories import Repositories
 
 
 class TargetResolver:
-    def __init__(self, session: Session) -> None:
-        self.repos = Repositories(session)
+    def __init__(self, session: Session, actor=None) -> None:
+        self.repos = Repositories(session, actor)
 
     def resolve(self, selector: dict[str, Any] | None) -> dict[str, Any]:
         if not selector:
@@ -82,6 +82,7 @@ class TargetResolver:
     def _sanitize(self, entity_type: str, item: dict[str, Any]) -> dict[str, Any]:
         return {
             "id": item["id"],
+            "revision": item.get('revision'),
             "entityType": entity_type,
             "title": item.get("title") or item.get("name"),
             "date": (item.get("startAt") or item.get("dueDate") or "")[:10] or None,

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request, Header
 from sqlalchemy.orm import Session
 
 from app.application.entity_service import EntityService
 from app.core.errors import AppError
+from app.core.calendar_actor import CalendarActor, require_actor
 from app.infrastructure.db.session import get_db
 
 router = APIRouter(tags=["entities"])
@@ -26,8 +27,10 @@ COLLECTIONS = [
 ]
 
 
-def get_service(db: Session = Depends(get_db)) -> EntityService:
-    return EntityService(db)
+def get_service(request:Request,db: Session = Depends(get_db), actor: CalendarActor = Depends(require_actor)) -> EntityService:
+    from app.core.calendar_actor import require_scope
+    require_scope(actor,'calendar:read' if request.method == 'GET' else 'calendar:write')
+    return EntityService(db, actor)
 
 
 @router.get("/calendars/local")
@@ -75,8 +78,9 @@ def put_one(
 def delete_one(
     collection: str,
     entity_id: str,
+    if_match: int | None = Header(default=None,alias='If-Match'),
     service: EntityService = Depends(get_service),
 ) -> dict[str, Any]:
     if collection not in COLLECTIONS:
         raise AppError("not_found", f"Unknown collection: {collection}", status_code=404)
-    return service.delete_entity(collection, entity_id)
+    return service.delete_entity(collection, entity_id,if_match)

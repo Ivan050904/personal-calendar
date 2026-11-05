@@ -7,6 +7,11 @@ from starlette.responses import JSONResponse, Response
 from app.core.auth import COOKIE_NAME, auth_configured, read_session_username
 from app.core.config import get_settings
 from app.core.errors import error_body
+from datetime import datetime, timezone
+from app.core.bridge_auth import verify_bridge_actor
+from app.core.errors import AppError
+from app.infrastructure.db.session import SessionLocal
+from app.infrastructure.db.auth_sessions import read_actor_session
 
 
 def _is_public_path(path: str) -> bool:
@@ -19,6 +24,7 @@ def _is_public_path(path: str) -> bool:
             "/auth/me",
             "/auth/logout",
             "/auth/sso",
+            "/auth/folio",
             "/docs",
             "/openapi.json",
             "/redoc",
@@ -53,25 +59,37 @@ def hmac_compare(left: str, right: str) -> bool:
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         settings = get_settings()
-        if not auth_configured(settings.auth_username, settings.auth_password, settings.auth_session_secret):
-            return await call_next(request)
-
+        actor = None
+        if request.method not in {'GET','HEAD','OPTIONS'}:
+            origin = request.headers.get('origin')
+            if origin and origin.rstrip('/') not in {str(request.base_url).rstrip('/'), *settings.cors_origin_list}:
+                return JSONResponse(status_code=403,content=error_body('forbidden','Invalid request origin'))
+        header = request.headers.get("Authorization", "")
+        try:
+            if header.lower().startswith("bearer "):
+                actor = verify_bridge_actor(header[7:], settings, datetime.now(timezone.utc))
+                from app.infrastructure.db.models import CalendarPrincipalModel
+                with SessionLocal() as db:
+                    principal=db.get(CalendarPrincipalModel,actor.principal_id)
+                    if principal is not None and not principal.active:
+                        raise AppError('forbidden','Principal inactive',status_code=403)
+            elif request.cookies.get(COOKIE_NAME):
+                with SessionLocal() as db:
+                    actor = read_actor_session(db, request.cookies.get(COOKIE_NAME))
+        except AppError as exc:
+            return JSONResponse(status_code=exc.status_code, content=error_body(exc.code, exc.message))
+        if actor:
+            request.state.actor = actor
+            request.state.username = settings.auth_username if actor.folio_user_id is None else None
         if request.method == "OPTIONS" or _is_public_path(request.url.path):
             return await call_next(request)
-
-        if _service_token_ok(request, settings):
-            request.state.username = settings.auth_username
-            request.state.folio_service = True
-            return await call_next(request)
-
-        username = read_session_username(
-            request.cookies.get(COOKIE_NAME),
-            secret=settings.auth_session_secret,
-        )
-        if username is None or username != settings.auth_username:
+        if actor is None:
             return JSONResponse(
                 status_code=401,
                 content=error_body("unauthorized", "Требуется вход"),
             )
-        request.state.username = username
+        if actor.session_id and request.method not in {"GET", "HEAD", "OPTIONS"}:
+            origin = request.headers.get("origin")
+            if origin and origin.rstrip("/") not in {str(request.base_url).rstrip("/"), *settings.cors_origin_list}:
+                return JSONResponse(status_code=403, content=error_body("forbidden", "Invalid request origin"))
         return await call_next(request)

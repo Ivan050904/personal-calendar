@@ -30,7 +30,7 @@ def test_entity_crud_via_api(client):
     assert local.json() is not None
     assert "id" in local.json()
 
-    deleted = client.delete("/api/entities/calendars/api-cal-1")
+    deleted = client.delete("/api/entities/calendars/api-cal-1", headers={'If-Match':str(got.json()['revision'])})
     assert deleted.status_code == 200
     missing = client.get("/api/entities/calendars/api-cal-1")
     assert missing.status_code == 404

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from app.ai.prompts import OFF_TOPIC_MESSAGE, enrich_action_from_message
 from app.application.drafts import DraftService
 from app.core.config import get_settings
 from app.core.errors import AppError
+from app.core.calendar_actor import CalendarActor, require_actor
 from app.infrastructure.db.session import get_db
 from app.infrastructure.repositories import Repositories
 
@@ -29,8 +30,10 @@ class ChatResponse(BaseModel):
     draft: dict[str, Any] | None = None
 
 
-def get_draft_service(db: Session = Depends(get_db)) -> DraftService:
-    return DraftService(db)
+def get_draft_service(request:Request,db: Session = Depends(get_db), actor: CalendarActor = Depends(require_actor)) -> DraftService:
+    from app.core.calendar_actor import require_scope
+    require_scope(actor,'calendar:read' if request.method == 'GET' else 'calendar:write')
+    return DraftService(db, actor)
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -45,7 +48,7 @@ async def chat(
     if body.draft_id:
         context = drafts.get(body.draft_id)
 
-    local_calendar = Repositories(db).calendars.get_local_calendar()
+    local_calendar = Repositories(db, drafts.actor).calendars.get_local_calendar()
     calendar_tz = (local_calendar or {}).get("timezone")
     propose_context = dict(context or {})
     if calendar_tz:

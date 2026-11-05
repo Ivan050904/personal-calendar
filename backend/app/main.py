@@ -9,6 +9,8 @@ from app.core.rate_limit import SimpleRateLimitMiddleware
 
 
 def create_app() -> FastAPI:
+    from app.core.log_redaction import install_log_redaction
+    install_log_redaction()
     settings = get_settings()
     app = FastAPI(title=settings.app_name)
     register_exception_handlers(app)

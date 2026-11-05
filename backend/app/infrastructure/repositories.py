@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.infrastructure.db import models as m
+from app.core.errors import AppError
 
 TModel = TypeVar("TModel")
 
@@ -21,6 +22,8 @@ def _iso(value: datetime | date | None) -> str | None:
     if value is None:
         return None
     if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
         return value.replace(microsecond=0).isoformat() + "Z"
     return value.isoformat()
 
@@ -52,12 +55,41 @@ class SqlEntityRepository(Generic[TModel]):
     model: type[TModel]
     include_deleted: bool = False
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, actor=None) -> None:
         self.session = session
+        self.actor = actor
+
+    def owned(self, row) -> bool:
+        if self.actor is None:
+            return True  # Internal compatibility only; HTTP dependencies always supply actor.
+        owner = getattr(row, "owner_id", None)
+        if hasattr(row, "owner_id"):
+            return owner == self.actor.principal_id
+        for column, model in [("calendar_id", m.CalendarModel), ("event_id", m.EventModel),
+                              ("plan_id", m.PlanModel), ("list_id", m.TaskListModel)]:
+            if hasattr(row, column):
+                parent = self.session.get(model, getattr(row, column))
+                return parent is not None and self.owned(parent)
+        return False
+
+    def _require_owned(self, row) -> None:
+        if row is None or not self.owned(row):
+            raise AppError("not_found", "Entity not found", status_code=404)
+
+    def _validate_parents(self, entity) -> None:
+        if self.actor is None:
+            return
+        for key, model in [("calendarId", m.CalendarModel), ("eventId", m.EventModel),
+                           ("planId", m.PlanModel), ("listId", m.TaskListModel),
+                           ("recurrenceRuleId", m.RecurrenceRuleModel), ("categoryId", m.CategoryModel)]:
+            if entity.get(key):
+                self._require_owned(self.session.get(model, entity[key]))
 
     def get(self, entity_id: str) -> dict[str, Any] | None:
         row = self.session.get(self.model, entity_id)
         if row is None:
+            return None
+        if not self.owned(row):
             return None
         if not self.include_deleted and getattr(row, "deleted_at", None) is not None:
             return None
@@ -68,12 +100,17 @@ class SqlEntityRepository(Generic[TModel]):
         if not self.include_deleted and hasattr(self.model, "deleted_at"):
             stmt = stmt.where(self.model.deleted_at.is_(None))  # type: ignore[attr-defined]
         rows = self.session.scalars(stmt).all()
-        return [self.to_dict(row) for row in rows]
+        return [self.to_dict(row) for row in rows if self.owned(row)]
 
     def put(self, entity: dict[str, Any]) -> dict[str, Any]:
         row = self.session.get(self.model, entity["id"])
+        self._validate_parents(entity)
+        if row is not None:
+            self._require_owned(row)
         if row is None:
             row = self.from_dict(entity)
+            if self.actor is not None and hasattr(row, "owner_id"):
+                row.owner_id = self.actor.principal_id
             self.session.add(row)
         else:
             self.apply_dict(row, entity)
@@ -84,12 +121,16 @@ class SqlEntityRepository(Generic[TModel]):
         row = self.session.get(self.model, entity_id)
         if row is None:
             return False
+        self._require_owned(row)
         row.deleted_at = deleted_at or datetime.utcnow()
         row.updated_at = datetime.utcnow()
         self.session.flush()
         return True
 
-    def to_dict(self, row: TModel) -> dict[str, Any]:  # pragma: no cover - abstract
+    def to_dict(self, row: TModel) -> dict[str, Any]:
+        return {**self._serialize(row), 'revision': row.revision}
+
+    def _serialize(self, row: TModel) -> dict[str, Any]:  # pragma: no cover - abstract
         raise NotImplementedError
 
     def from_dict(self, entity: dict[str, Any]) -> TModel:  # pragma: no cover - abstract
@@ -98,13 +139,27 @@ class SqlEntityRepository(Generic[TModel]):
     def apply_dict(self, row: TModel, entity: dict[str, Any]) -> None:
         fresh = self.from_dict(entity)
         for column in row.__table__.columns:  # type: ignore[attr-defined]
+            if column.name in {"owner_id", "default_owner", "revision", "created_at"}:
+                continue
             setattr(row, column.name, getattr(fresh, column.name))
 
 
 class CalendarRepository(SqlEntityRepository[m.CalendarModel]):
     model = m.CalendarModel
 
+    def put(self,entity):
+        saved = super().put(entity)
+        if self.actor:
+            row = self.session.get(self.model,entity['id'])
+            if self.session.scalar(select(self.model).where(self.model.default_owner == self.actor.principal_id)) is None:
+                row.default_owner = self.actor.principal_id
+                self.session.flush()
+        return saved
+
     def get_local_calendar(self) -> dict[str, Any] | None:
+        if self.actor:
+            row = self.session.scalar(select(self.model).where(self.model.default_owner == self.actor.principal_id,self.model.owner_id == self.actor.principal_id,self.model.deleted_at.is_(None)))
+            return self.to_dict(row) if row else None
         items = self.list()
         if not items:
             return None
@@ -120,11 +175,13 @@ class CalendarRepository(SqlEntityRepository[m.CalendarModel]):
         items.sort(key=created_key)
         return items[0]
 
-    def to_dict(self, row: m.CalendarModel) -> dict[str, Any]:
+    def _serialize(self, row: m.CalendarModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "name": row.name,
             "timezone": row.timezone,
+            "ownerId": row.owner_id,
+            "revision": row.revision,
             "createdAt": _iso(row.created_at),
             "updatedAt": _iso(row.updated_at),
             "deletedAt": _iso(row.deleted_at),
@@ -146,13 +203,13 @@ class CalendarScopedRepository(SqlEntityRepository[TModel], Generic[TModel]):
         stmt = select(self.model).where(self.model.calendar_id == calendar_id)  # type: ignore[attr-defined]
         if not self.include_deleted and hasattr(self.model, "deleted_at"):
             stmt = stmt.where(self.model.deleted_at.is_(None))  # type: ignore[attr-defined]
-        return [self.to_dict(row) for row in self.session.scalars(stmt).all()]
+        return [self.to_dict(row) for row in self.session.scalars(stmt).all() if self.owned(row)]
 
 
 class EventRepository(CalendarScopedRepository[m.EventModel]):
     model = m.EventModel
 
-    def to_dict(self, row: m.EventModel) -> dict[str, Any]:
+    def _serialize(self, row: m.EventModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "calendarId": row.calendar_id,
@@ -162,6 +219,9 @@ class EventRepository(CalendarScopedRepository[m.EventModel]):
             "endAt": _iso(row.end_at),
             "timezone": row.timezone,
             "allDay": row.all_day,
+            "startDate": _iso(row.start_date),
+            "endDateExclusive": _iso(row.end_date_exclusive),
+            "location": row.location,
             "categoryId": row.category_id,
             "color": row.color,
             "recurrenceRuleId": row.recurrence_rule_id,
@@ -180,6 +240,9 @@ class EventRepository(CalendarScopedRepository[m.EventModel]):
             end_at=_parse_dt(entity["endAt"]),
             timezone=entity["timezone"],
             all_day=bool(entity.get("allDay", False)),
+            start_date=_parse_date(entity.get('startDate')),
+            end_date_exclusive=_parse_date(entity.get('endDateExclusive')),
+            location=entity.get('location'),
             category_id=entity.get("categoryId"),
             color=entity["color"],
             recurrence_rule_id=entity.get("recurrenceRuleId"),
@@ -192,7 +255,7 @@ class EventRepository(CalendarScopedRepository[m.EventModel]):
 class RecurrenceRuleRepository(SqlEntityRepository[m.RecurrenceRuleModel]):
     model = m.RecurrenceRuleModel
 
-    def to_dict(self, row: m.RecurrenceRuleModel) -> dict[str, Any]:
+    def _serialize(self, row: m.RecurrenceRuleModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "frequency": row.frequency,
@@ -224,7 +287,7 @@ class RecurrenceRuleRepository(SqlEntityRepository[m.RecurrenceRuleModel]):
 class EventExceptionRepository(SqlEntityRepository[m.EventExceptionModel]):
     model = m.EventExceptionModel
 
-    def to_dict(self, row: m.EventExceptionModel) -> dict[str, Any]:
+    def _serialize(self, row: m.EventExceptionModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "eventId": row.event_id,
@@ -256,7 +319,7 @@ class EventExceptionRepository(SqlEntityRepository[m.EventExceptionModel]):
 class PlanRepository(CalendarScopedRepository[m.PlanModel]):
     model = m.PlanModel
 
-    def to_dict(self, row: m.PlanModel) -> dict[str, Any]:
+    def _serialize(self, row: m.PlanModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "calendarId": row.calendar_id,
@@ -294,9 +357,9 @@ class PlanTaskRepository(SqlEntityRepository[m.PlanTaskModel]):
         stmt = select(m.PlanTaskModel).where(m.PlanTaskModel.plan_id == plan_id)
         if not self.include_deleted:
             stmt = stmt.where(m.PlanTaskModel.deleted_at.is_(None))
-        return [self.to_dict(row) for row in self.session.scalars(stmt).all()]
+        return [self.to_dict(row) for row in self.session.scalars(stmt).all() if self.owned(row)]
 
-    def to_dict(self, row: m.PlanTaskModel) -> dict[str, Any]:
+    def _serialize(self, row: m.PlanTaskModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "planId": row.plan_id,
@@ -324,7 +387,7 @@ class PlanTaskRepository(SqlEntityRepository[m.PlanTaskModel]):
 class TaskRepository(CalendarScopedRepository[m.TaskModel]):
     model = m.TaskModel
 
-    def to_dict(self, row: m.TaskModel) -> dict[str, Any]:
+    def _serialize(self, row: m.TaskModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "calendarId": row.calendar_id,
@@ -356,7 +419,7 @@ class TaskRepository(CalendarScopedRepository[m.TaskModel]):
 class ListRepository(CalendarScopedRepository[m.TaskListModel]):
     model = m.TaskListModel
 
-    def to_dict(self, row: m.TaskListModel) -> dict[str, Any]:
+    def _serialize(self, row: m.TaskListModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "calendarId": row.calendar_id,
@@ -384,9 +447,9 @@ class ListItemRepository(SqlEntityRepository[m.TaskListItemModel]):
         stmt = select(m.TaskListItemModel).where(m.TaskListItemModel.list_id == list_id)
         if not self.include_deleted:
             stmt = stmt.where(m.TaskListItemModel.deleted_at.is_(None))
-        return [self.to_dict(row) for row in self.session.scalars(stmt).all()]
+        return [self.to_dict(row) for row in self.session.scalars(stmt).all() if self.owned(row)]
 
-    def to_dict(self, row: m.TaskListItemModel) -> dict[str, Any]:
+    def _serialize(self, row: m.TaskListItemModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "listId": row.list_id,
@@ -414,7 +477,7 @@ class ListItemRepository(SqlEntityRepository[m.TaskListItemModel]):
 class CategoryRepository(CalendarScopedRepository[m.CategoryModel]):
     model = m.CategoryModel
 
-    def to_dict(self, row: m.CategoryModel) -> dict[str, Any]:
+    def _serialize(self, row: m.CategoryModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "calendarId": row.calendar_id,
@@ -442,13 +505,15 @@ class ReminderRepository(SqlEntityRepository[m.ReminderModel]):
         stmt = select(m.ReminderModel).where(m.ReminderModel.event_id == event_id)
         if not self.include_deleted:
             stmt = stmt.where(m.ReminderModel.deleted_at.is_(None))
-        return [self.to_dict(row) for row in self.session.scalars(stmt).all()]
+        return [self.to_dict(row) for row in self.session.scalars(stmt).all() if self.owned(row)]
 
-    def to_dict(self, row: m.ReminderModel) -> dict[str, Any]:
+    def _serialize(self, row: m.ReminderModel) -> dict[str, Any]:
         return {
             "id": row.id,
             "eventId": row.event_id,
             "offsetMinutes": row.offset_minutes,
+            "enabled": row.enabled,
+            "reminderTime": row.reminder_time,
             "createdAt": _iso(row.created_at),
             "updatedAt": _iso(row.updated_at),
             "deletedAt": _iso(row.deleted_at),
@@ -459,6 +524,8 @@ class ReminderRepository(SqlEntityRepository[m.ReminderModel]):
             id=entity["id"],
             event_id=entity["eventId"],
             offset_minutes=int(entity["offsetMinutes"]),
+            enabled=bool(entity.get('enabled',True)),
+            reminder_time=entity.get('reminderTime'),
             created_at=_parse_dt(entity["createdAt"]) or datetime.utcnow(),
             updated_at=_parse_dt(entity["updatedAt"]) or datetime.utcnow(),
             deleted_at=_parse_dt(entity.get("deletedAt")),
@@ -466,15 +533,15 @@ class ReminderRepository(SqlEntityRepository[m.ReminderModel]):
 
 
 class Repositories:
-    def __init__(self, session: Session) -> None:
-        self.calendars = CalendarRepository(session)
-        self.events = EventRepository(session)
-        self.recurrence_rules = RecurrenceRuleRepository(session)
-        self.event_exceptions = EventExceptionRepository(session)
-        self.plans = PlanRepository(session)
-        self.plan_tasks = PlanTaskRepository(session)
-        self.tasks = TaskRepository(session)
-        self.lists = ListRepository(session)
-        self.list_items = ListItemRepository(session)
-        self.categories = CategoryRepository(session)
-        self.reminders = ReminderRepository(session)
+    def __init__(self, session: Session, actor=None) -> None:
+        self.calendars = CalendarRepository(session, actor)
+        self.events = EventRepository(session, actor)
+        self.recurrence_rules = RecurrenceRuleRepository(session, actor)
+        self.event_exceptions = EventExceptionRepository(session, actor)
+        self.plans = PlanRepository(session, actor)
+        self.plan_tasks = PlanTaskRepository(session, actor)
+        self.tasks = TaskRepository(session, actor)
+        self.lists = ListRepository(session, actor)
+        self.list_items = ListItemRepository(session, actor)
+        self.categories = CategoryRepository(session, actor)
+        self.reminders = ReminderRepository(session, actor)

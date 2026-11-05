@@ -24,11 +24,20 @@ def utcnow() -> datetime:
 
 
 class TimestampMixin:
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), nullable=False, default=utcnow, onupdate=utcnow
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+
+
+class CalendarPrincipalModel(Base):
+    __tablename__ = "calendar_principals"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    folio_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    legacy_alias: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class CalendarModel(Base, TimestampMixin):
@@ -37,6 +46,8 @@ class CalendarModel(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    owner_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("calendar_principals.id"), nullable=True, index=True)
+    default_owner: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
 
 
 class EventModel(Base, TimestampMixin):
@@ -46,8 +57,11 @@ class EventModel(Base, TimestampMixin):
     calendar_id: Mapped[str] = mapped_column(String(64), ForeignKey("calendars.id"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
-    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date_exclusive: Mapped[date | None] = mapped_column(Date, nullable=True)
+    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     all_day: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     category_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -59,6 +73,9 @@ class RecurrenceRuleModel(Base, TimestampMixin):
     __tablename__ = "recurrence_rules"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("calendar_principals.id"), nullable=True, index=True)
+    dst_gap_policy: Mapped[str] = mapped_column(String(32), nullable=False, default="skip")
+    dst_fold_policy: Mapped[str] = mapped_column(String(32), nullable=False, default="early")
     frequency: Mapped[str] = mapped_column(String(32), nullable=False)
     interval: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     weekdays: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
@@ -76,6 +93,7 @@ class EventExceptionModel(Base, TimestampMixin):
     recurrence_rule_id: Mapped[str] = mapped_column(String(64), nullable=False)
     occurrence_key: Mapped[str] = mapped_column(String(64), nullable=False)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
+    override_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     override_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     override_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
 
@@ -147,13 +165,17 @@ class ReminderModel(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     event_id: Mapped[str] = mapped_column(String(64), ForeignKey("events.id"), nullable=False, index=True)
     offset_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    reminder_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
 
 
 class SettingModel(Base, TimestampMixin):
     __tablename__ = "settings"
+    __table_args__ = (UniqueConstraint("owner_id", "key", name="uq_owner_setting"),)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+    owner_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("calendar_principals.id"), nullable=True, index=True)
     value: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
 
@@ -161,6 +183,7 @@ class DraftModel(Base):
     __tablename__ = "ai_drafts"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("calendar_principals.id"), nullable=True, index=True)
     conversation_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     operation: Mapped[str] = mapped_column(String(32), nullable=False)
     entity_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -175,3 +198,56 @@ class DraftModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+
+
+class CalendarSessionModel(Base):
+    __tablename__ = "calendar_sessions"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    principal_id: Mapped[str] = mapped_column(String(64), ForeignKey("calendar_principals.id"), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+
+
+class CalendarWriteReceiptModel(Base):
+    __tablename__ = 'calendar_write_receipts'
+    owner_id: Mapped[str] = mapped_column(String(64), ForeignKey('calendar_principals.id'), primary_key=True)
+    command_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    body_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
+
+
+class CalendarConfirmationModel(Base):
+    __tablename__ = 'calendar_confirmations'
+    __table_args__ = (UniqueConstraint('owner_id', 'entity_id', 'occurrence_ref', name='uq_calendar_fact_occurrence'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(64), ForeignKey('calendar_principals.id'), nullable=False, index=True)
+    calendar_id: Mapped[str] = mapped_column(String(64), ForeignKey('calendars.id'), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)
+    occurrence_ref: Mapped[str] = mapped_column(String(100), nullable=False, default='')
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    happened_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    happened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    time_zone: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
+    audit: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    previous_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    next_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class CalendarChangeModel(Base):
+    __tablename__ = 'calendar_changes'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_id: Mapped[str] = mapped_column(String(64), ForeignKey('calendar_principals.id'), nullable=False, index=True)
+    calendar_id: Mapped[str] = mapped_column(String(64), ForeignKey('calendars.id'), nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    operation: Mapped[str] = mapped_column(String(20), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
+    deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

@@ -5,23 +5,27 @@ import type { CalendarEntityRepository, EntityRepository } from './repositories'
 import { nextDueDateAfter, type RecurrenceDraft } from './recurrence'
 
 export interface TaskDraft {
+  /** Revision of the entity when the editor was opened (required in API mode). */
+  expectedRevision?: number
   title: string
   description?: string
   dueDate?: IsoDate
   recurrence?: RecurrenceDraft
 }
 
+export type TaskActionSnapshot = Pick<Task, 'revision' | 'dueDate' | 'completed'>
+
 export interface TasksService {
   readonly calendar: Calendar
   createTask(draft: TaskDraft): Promise<Task>
   updateTask(id: string, draft: TaskDraft): Promise<Task>
-  deleteTask(id: string): Promise<void>
+  deleteTask(id: string, expectedRevision?: number): Promise<void>
   listUndatedTasks(): Promise<Task[]>
   listTasksForDate(date: IsoDate): Promise<Task[]>
   /** Exact due date plus incomplete overdue tasks (for Today / «Сегодня»). */
   listTasksDueOnOrOverdue(date: IsoDate): Promise<Task[]>
-  moveTask(id: string, dueDate: IsoDate): Promise<Task>
-  toggleCompleted(id: string): Promise<Task>
+  moveTask(id: string, dueDate: IsoDate, expectedRevision?: number): Promise<Task>
+  toggleCompleted(id: string, snapshot?: TaskActionSnapshot): Promise<Task>
   getRecurrenceRule(id: string): Promise<RecurrenceRule | undefined>
 }
 

@@ -5,6 +5,8 @@ import { dateKey } from './day-calendar'
 import type { CalendarEntityRepository, EntityRepository } from './repositories'
 
 export interface PlanDraft {
+  /** Revision of the entity when the editor was opened (required in API mode). */
+  expectedRevision?: number
   title: string
   description?: string
   startAt: string
@@ -22,7 +24,7 @@ export interface PlansService {
   readonly calendar: Calendar
   createPlan(draft: PlanDraft): Promise<Plan>
   updatePlan(id: string, draft: PlanDraft): Promise<Plan>
-  deletePlan(id: string): Promise<void>
+  deletePlan(id: string, expectedRevision?: number): Promise<void>
   listPlansInRange(startDate: string, endDate: string): Promise<Plan[]>
   addTask(planId: string, title: string): Promise<PlanTask>
   updateTask(id: string, title: string): Promise<PlanTask>

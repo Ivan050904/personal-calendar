@@ -60,3 +60,8 @@ D29 — Mobile navigation drawer: ≤600px shows a top app bar hamburger that op
 
 D30 — Tasks section layout: composer is two rows (title+Add, then date shortcuts/date/repeat); desktop ≥900px shows task buckets in two columns; TaskRow groups meta chips and uses compact icon delete. Domain fields unchanged (D12/D26).
 
+D31 — Calendar/Folio integration v2 (2026-10-09, local authorized R0–R5): supersedes D17 global single-user gate with explicit CalendarPrincipal ownership, owner-bound revocable sessions and dedicated scoped bridge JWT (iss/aud/purpose/time claims, TTL60s, skew30s). Legacy login requires explicit enabled flag and verified principal ID. Unconfigured auth never grants access. Legacy data remains unassigned pending optional import; this clone does not infer an owner.
+
+D32 — Supersedes D21 device-write bootstrap: opening a different device/display zone preserves calendar timezone and all event instants, with zero write requests. Server UTC-aware wire, date-only all-day exclusive bounds, bounded recurrence projection; ISO weekdays1..7. Monthly day31 clamps; DST gaps skip without consuming count, folds select earlier instant. Original occurrence identity survives moves.
+
+D33 — Extends D24/D28: source calendar owns commands, revisions, receipts and voluntary confirmation facts. PC API task completion uses server commands; elapsed events create no facts. Rolling completion stores original due before advancing beyond happened_date; stale undo cannot roll back later completion. Folio owns background delivery preferences; browser reminders remain best effort. Existing presets preserved, 10/20 added.

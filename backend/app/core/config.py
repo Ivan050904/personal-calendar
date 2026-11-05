@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     auth_username: str = ""
     auth_password: str = ""
     auth_session_secret: str = ""
+    legacy_auth_enabled: bool = False
+    legacy_principal_id: str = ""
+    calendar_bridge_secret: str = ""
+    folio_exchange_base_url: str = ""
+    folio_exchange_secret: str = ""
+    folio_server_client_id: str = ""
+    legacy_sso_enabled: bool = False
 
     # Folio-One SSO (JWT from petrushka87 / Folio login)
     folio_jwt_secret: str = ""

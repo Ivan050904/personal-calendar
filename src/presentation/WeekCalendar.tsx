@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Event, Plan } from '../domain/models'
 import { addDays, mondayOf, weekSegments } from '../application/week-calendar'
 import { dateKey, type DayCalendarService } from '../application/day-calendar'
@@ -93,13 +93,13 @@ export function WeekCalendar({
     return Number(hour ?? '0')
   })()
   const weekEnd = addDays(weekStart, 6)
-  const visibleHours = useMemo(() => {
+  const visibleHours = (() => {
     const forced = segments.flatMap((segment) =>
       occupiedHours(segment.event.startAt, segment.event.endAt, segment.event.timezone || calendar.calendar.timezone),
     )
     if (todayKey >= weekStart && todayKey <= weekEnd) forced.push(nowHour)
     return buildVisibleHours(visibleHoursPref, forced)
-  }, [segments, calendar.calendar.timezone, visibleHoursPref, weekStart, weekEnd, todayKey, nowHour])
+  })()
 
   const openItem = (item: Event, day: string) => {
     if (item.id.startsWith('plan::')) {

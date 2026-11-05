@@ -1,100 +1,82 @@
-from __future__ import annotations
+from datetime import datetime
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
-from app.core.auth import (
-    COOKIE_NAME,
-    auth_configured,
-    clear_session_cookie,
-    issue_session_token,
-    passwords_match,
-    read_session_username,
-    set_session_cookie,
-)
+from app.core.auth import clear_session_cookie, passwords_match, set_session_cookie
+from app.core.bridge_auth import SCOPES, exchange_folio_launch, principal_id, safe_launch_target
+from app.core.calendar_actor import CalendarActor, ensure_actor_calendar, require_owned_calendar
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.core.folio_sso import decode_folio_jwt, folio_identity_allowed, parse_csv_set
+from app.infrastructure.db.auth_sessions import create_session
+from app.infrastructure.db.models import CalendarPrincipalModel, CalendarSessionModel
+from app.infrastructure.db.session import get_db
 
-router = APIRouter(prefix="/auth", tags=["auth"])
-
+router = APIRouter(prefix='/auth', tags=['auth'])
 
 class LoginBody(BaseModel):
     username: str = Field(min_length=1)
     password: str = Field(min_length=1)
 
-
-class MeResponse(BaseModel):
-    authenticated: bool
-    username: str | None = None
-
-
-@router.post("/login")
-def login(body: LoginBody, response: Response) -> dict[str, object]:
+@router.post('/login')
+def login(body: LoginBody, response: Response, db: Session = Depends(get_db)):
     settings = get_settings()
-    if not auth_configured(settings.auth_username, settings.auth_password, settings.auth_session_secret):
-        raise AppError(
-            "validation_error",
-            "Auth is not configured on the server",
-            status_code=503,
-        )
-    if body.username != settings.auth_username or not passwords_match(body.password, settings.auth_password):
-        raise AppError("unauthorized", "Неверный логин или пароль", status_code=401)
+    if not settings.legacy_auth_enabled or not settings.legacy_principal_id or not settings.auth_session_secret:
+        raise AppError('unavailable', 'Verified legacy login is not configured', status_code=503)
+    if body.username != settings.auth_username or not settings.auth_password or not passwords_match(body.password, settings.auth_password):
+        raise AppError('unauthorized', 'Неверный логин или пароль', status_code=401)
+    principal = db.get(CalendarPrincipalModel, settings.legacy_principal_id)
+    if principal is None:
+        principal = CalendarPrincipalModel(id=settings.legacy_principal_id, legacy_alias=body.username)
+        db.add(principal)
+        db.flush()
+    if not principal.active:
+        raise AppError('forbidden', 'Principal inactive', status_code=403)
+    token, _ = create_session(db, principal)
+    db.commit()
+    set_session_cookie(response, token, secure=settings.app_env == 'production')
+    return {'ok': True, 'username': body.username}
 
-    token = issue_session_token(username=settings.auth_username, secret=settings.auth_session_secret)
-    set_session_cookie(response, token, secure=settings.app_env == "production")
-    return {"ok": True, "username": settings.auth_username}
-
-
-@router.post("/logout")
-def logout(response: Response) -> dict[str, object]:
+@router.post('/logout')
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    actor = getattr(request.state, 'actor', None)
+    if actor and actor.session_id:
+        row = db.get(CalendarSessionModel, actor.session_id)
+        if row:
+            row.revoked_at = datetime.utcnow()
+            db.commit()
     clear_session_cookie(response)
-    return {"ok": True}
+    return {'ok': True}
 
+@router.get('/me')
+def me(request: Request):
+    actor = getattr(request.state, 'actor', None)
+    return {'authenticated': actor is not None, 'username': getattr(request.state, 'username', None),
+            'principal_id': actor.principal_id if actor else None,
+            'folio_user_id': actor.folio_user_id if actor else None,
+            'session_id': actor.session_id if actor else None}
 
-@router.get("/me", response_model=MeResponse)
-def me(request: Request) -> MeResponse:
+@router.get('/folio')
+def folio_launch(request: Request, db: Session = Depends(get_db)):
     settings = get_settings()
-    if not auth_configured(settings.auth_username, settings.auth_password, settings.auth_session_secret):
-        return MeResponse(authenticated=True, username=None)
-    username = read_session_username(
-        request.cookies.get(COOKIE_NAME),
-        secret=settings.auth_session_secret,
-    )
-    if username is None or username != settings.auth_username:
-        return MeResponse(authenticated=False, username=None)
-    return MeResponse(authenticated=True, username=username)
-
-
-@router.get("/sso")
-def folio_sso(request: Request) -> Response:
-    """Accept Folio-One JWT and issue calendar pc_session for the mapped single-user."""
-    settings = get_settings()
-    if not auth_configured(settings.auth_username, settings.auth_password, settings.auth_session_secret):
-        raise AppError("validation_error", "Auth is not configured on the server", status_code=503)
-    if not settings.folio_jwt_secret.strip():
-        raise AppError("validation_error", "Folio SSO is not configured", status_code=503)
-
-    token = request.query_params.get("access_token", "").strip()
-    if not token:
-        raise AppError("unauthorized", "access_token is required", status_code=401)
-
-    payload = decode_folio_jwt(
-        token,
-        secret=settings.folio_jwt_secret,
-        algorithm=settings.folio_jwt_algorithm or "HS256",
-    )
-    if payload is None:
-        raise AppError("unauthorized", "Invalid Folio token", status_code=401)
-
-    allowed_emails = parse_csv_set(settings.folio_sso_emails)
-    allowed_ids = parse_csv_set(settings.folio_sso_user_ids)
-    if not folio_identity_allowed(payload, allowed_emails=allowed_emails, allowed_user_ids=allowed_ids):
-        raise AppError("forbidden", "Folio user is not linked to this calendar", status_code=403)
-
-    session = issue_session_token(username=settings.auth_username, secret=settings.auth_session_secret)
-    redirect_to = settings.folio_sso_redirect.strip() or "/"
-    response = RedirectResponse(url=redirect_to, status_code=302)
-    set_session_cookie(response, session, secure=settings.app_env == "production")
+    code = request.query_params.get('code', '')
+    if not code:
+        raise AppError('unauthorized', 'Launch code is required', status_code=401)
+    launch = exchange_folio_launch(code, settings)
+    actor = CalendarActor(principal_id(launch['folio_user_id']), launch['folio_user_id'], SCOPES)
+    ensure_actor_calendar(db, actor, launch.get('timezone') or 'UTC', code)
+    if launch.get('calendar_id'):
+        require_owned_calendar(db, actor, launch['calendar_id'])
+    target = safe_launch_target(launch.get('target'))
+    principal = db.get(CalendarPrincipalModel, actor.principal_id)
+    token, _ = create_session(db, principal)
+    db.commit()
+    response = RedirectResponse(target, status_code=302, headers={'Referrer-Policy':'no-referrer', 'Cache-Control':'no-store'})
+    set_session_cookie(response, token, secure=settings.app_env == 'production')
     return response
+
+@router.get('/sso')
+def legacy_sso():
+    raise AppError('unavailable', 'Legacy SSO disabled; use one-time launch', status_code=503)

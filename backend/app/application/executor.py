@@ -43,14 +43,17 @@ def _to_utc_naive(value: str | datetime, calendar_tz: str | None) -> datetime:
 class DomainExecutor:
     """Applies confirmed draft operations to persistence."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, actor=None) -> None:
         self.session = session
-        self.repos = Repositories(session)
+        self.actor = actor
+        self.repos = Repositories(session, actor)
 
     def execute(self, draft: dict[str, Any]) -> dict[str, Any]:
         operation = draft.get("operation")
         entity_type = draft.get("entityType")
         payload = draft.get("payload") or {}
+        if self.actor and entity_type in {'event','task','plan'}:
+            return self._execute_command(draft)
 
         if operation == "CREATE":
             return self._create(entity_type, payload)
@@ -59,6 +62,46 @@ class DomainExecutor:
         if operation == "DELETE":
             return self._delete(entity_type, draft.get("target"), draft.get("recurrenceScope"))
         raise AppError("validation_error", f"Unsupported operation: {operation}", status_code=422)
+
+    def _execute_command(self,draft):
+        from app.application.calendar_commands import execute_calendar_command
+        from app.core.calendar_actor import require_owned_calendar
+        from app.application.occurrences import entity_read
+        from app.infrastructure.db import models as m
+        from app.application.calendar_time import zone
+        kind = draft['entityType']
+        payload = draft.get('payload') or {}
+        target = draft.get('target') or {}
+        if payload.get('calendarId'):
+            require_owned_calendar(self.session,self.actor,payload['calendarId'])
+        calendar = self.repos.calendars.get_local_calendar()
+        if not calendar:
+            raise AppError('not_found','Calendar not found',status_code=404)
+        timezone_name = payload.get('timezone') or calendar['timezone']
+        mapped = {}
+        for old,new in [('title','title'),('description','description'),('color','color'),('location','location'),('dueDate','due_date'),('allDay','all_day')]:
+            if old in payload:
+                mapped[new] = payload[old]
+        for old,new in [('start','start_at'),('startAt','start_at'),('end','end_at'),('endAt','end_at')]:
+            if payload.get(old):
+                mapped[new] = _iso(_to_utc_naive(payload[old],timezone_name))
+        if kind == 'event' and 'start_at' in mapped and 'end_at' not in mapped and payload.get('durationMinutes'):
+            mapped['end_at'] = _iso(_to_utc_naive(mapped['start_at'],timezone_name)+timedelta(minutes=int(payload['durationMinutes'])))
+        if draft['operation'] == 'CREATE':
+            mapped['timezone'] = timezone_name
+        if 'recurrence' in payload:
+            rule = payload['recurrence']
+            mapped['recurrence'] = None if not rule else {'frequency':rule['frequency'],'interval':rule.get('interval',1),'weekdays':rule.get('weekdays',[]),'day_of_month':rule.get('dayOfMonth'),'until_date':rule.get('untilDate'),'occurrence_count':rule.get('occurrenceCount')}
+        if mapped.get('all_day'):
+            start = _to_utc_naive(mapped['start_at'],timezone_name).replace(tzinfo=timezone.utc).astimezone(zone(timezone_name)).date()
+            end = _to_utc_naive(mapped['end_at'],timezone_name).replace(tzinfo=timezone.utc).astimezone(zone(timezone_name)).date()+timedelta(days=1)
+            mapped.update(start_at=None,end_at=None,start_date=str(start),end_date_exclusive=str(end))
+        operation = {'CREATE':'create','UPDATE':'patch','DELETE':'delete'}[draft['operation']]
+        envelope = {'command_id':draft['draftId'],'kind':kind,'operation':operation,'payload':mapped}
+        if operation != 'create':
+            envelope.update(entity_id=target.get('id'),expected_revision=target.get('revision'),occurrence_key=target.get('occurrenceKey'),scope={'entire_series':'series','occurrence':'this','this_and_following':'thisAndFollowing'}.get(draft.get('recurrenceScope'),draft.get('recurrenceScope')))
+        result = execute_calendar_command(self.session,self.actor,envelope)
+        return {'entityType':kind,'entity':result['entity'],'command':result}
 
     def _update(
         self,

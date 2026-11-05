@@ -1,5 +1,17 @@
 from collections.abc import Generator
 from pathlib import Path
+import os
+import tempfile
+
+# Override before importing app/settings/session: never touch the configured personal DB.
+_TEST_ROOT = tempfile.TemporaryDirectory(prefix="pc-synthetic-")
+os.environ["DATABASE_URL"] = f"sqlite:///{Path(_TEST_ROOT.name) / 'calendar-tests.sqlite'}"
+os.environ["APP_ENV"] = "test"
+os.environ["AUTH_USERNAME"] = "synthetic-legacy"
+os.environ["AUTH_PASSWORD"] = "synthetic-password"
+os.environ["AUTH_SESSION_SECRET"] = "synthetic-test-session-secret"
+os.environ["LEGACY_AUTH_ENABLED"] = "true"
+os.environ["LEGACY_PRINCIPAL_ID"] = "synthetic-legacy"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +20,16 @@ from sqlalchemy.orm import Session, sessionmaker
 
 # Ensure backend root is importable and .env is found
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def synthetic_schema():
+    from app.infrastructure.db.session import Base, engine
+    from app.infrastructure.db import models  # noqa: F401
+    Base.metadata.create_all(engine)
+    yield
+    Base.metadata.drop_all(engine)
+    engine.dispose()
 
 
 @pytest.fixture(scope="session")
@@ -54,6 +76,8 @@ def db_session() -> Generator[Session, None, None]:
 
     connection = engine.connect()
     transaction = connection.begin()
+    if connection.dialect.name == 'sqlite':
+        connection.exec_driver_sql('BEGIN')
     SessionLocal = sessionmaker(bind=connection, autoflush=False, autocommit=False, future=True)
     session = SessionLocal()
     try:

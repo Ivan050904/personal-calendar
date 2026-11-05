@@ -3,6 +3,7 @@ export type IsoDateTime = string
 export type IsoDate = string
 
 export interface Entity {
+  revision?: number
   id: EntityId
   createdAt: IsoDateTime
   updatedAt: IsoDateTime
@@ -19,6 +20,9 @@ export interface CalendarEntity extends Entity {
 }
 
 export interface Event extends CalendarEntity {
+  location?: string
+  startDate?: IsoDate
+  endDateExclusive?: IsoDate
   title: string
   description: string
   startAt: IsoDateTime
@@ -91,6 +95,8 @@ export interface Category extends CalendarEntity {
 }
 
 export interface Reminder extends Entity {
+  enabled?: boolean
+  reminderTime?: string
   eventId: EntityId
   offsetMinutes: number
 }
