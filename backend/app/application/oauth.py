@@ -18,13 +18,14 @@ from app.core.calendar_actor import CalendarActor
 from app.infrastructure.db import models as m
 
 # Scopes this server can grant today. freebusy.read and sharing.invite arrive with their waves.
-SUPPORTED_SCOPES = ("openid", "profile", "calendars.read", "events.read", "events.write")
+SUPPORTED_SCOPES = ("openid", "profile", "calendars.read", "events.read", "events.write", "sharing.invite")
 SCOPE_TEXT = {
     "openid": "узнать ваш аккаунт календаря",
     "profile": "видеть ваш логин и имя",
     "calendars.read": "видеть список выбранных календарей",
     "events.read": "читать события в выбранных календарях",
     "events.write": "создавать, менять и удалять события в своём календаре «{app}»",
+    "sharing.invite": "приглашать других на свои события, видеть ваши приглашения и отвечать на них",
 }
 READ_SCOPES = {"calendars.read", "events.read"}
 

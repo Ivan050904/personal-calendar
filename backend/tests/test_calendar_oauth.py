@@ -410,7 +410,7 @@ def test_owner_script_validates_redirect_uris():
     assert script.main(["create", "--name", "X", "--redirect-uri", "http://evil.example/cb"], out=out.append) == 1
     assert script.main(["create", "--name", "X", "--redirect-uri", "https://a.example/cb#frag"], out=out.append) == 1
     assert script.main(["create", "--name", "X", "--redirect-uri", "http://localhost:3000/cb"], out=out.append) == 0
-    assert script.main(["create", "--name", "X", "--redirect-uri", REDIRECT, "--scope", "sharing.invite"], out=out.append) == 1
+    assert script.main(["create", "--name", "X", "--redirect-uri", REDIRECT, "--scope", "freebusy.read"], out=out.append) == 1  # not supported yet
 
 
 def test_metadata(server):

@@ -35,6 +35,9 @@ def add_change(db,actor,row,kind,operation):
     db.add(m.CalendarChangeModel(owner_id=actor.principal_id,calendar_id=row.calendar_id,entity_id=row.id,kind=kind,operation=operation,revision=row.revision,deleted=row.deleted_at is not None,
                                  actor='app:'+actor.client_id if actor.client_id else 'user'))
     mark_pending(db,actor.principal_id,row.calendar_id,actor.client_id)
+    if kind == 'event':
+        from app.application.invitations import mirror_change
+        mirror_change(db,actor,row,operation)
     db.flush()
 
 

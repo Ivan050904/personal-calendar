@@ -6,7 +6,9 @@ import { LocalTasksService, type TaskDraft, type TaskActionSnapshot } from '../a
 import { LocalPlansService, type PlanDraft } from '../application/plans'
 import { allOccurrencePages, entityDetail, exactOccurrence, sendCalendarCommand, type CalendarEntityRead, type CalendarOccurrenceRead } from './calendar-occurrence-api'
 import { calendarTransport } from './api-repositories'
-import { overlayTargets } from './calendars-api'
+import { invitationOccurrences, overlayTargets } from './calendars-api'
+
+const PENDING_INVITATION_COLOR = '#94a3b8'
 
 /** Occurrences of every visible calendar for the board (D36). */
 async function overlayOccurrences(primary: Calendar, from: string, to: string, kind: 'event' | 'plan') {
@@ -14,7 +16,10 @@ async function overlayOccurrences(primary: Calendar, from: string, to: string, k
     const rows = (await allOccurrencePages(target.id, from, to, primary.timezone)).filter(row => row.kind === kind)
     return target.color ? rows.map(row => ({ ...row, color: target.color! })) : rows
   }))
-  return pages.flat()
+  // D38: events others invited me to; until answered they show greyed out with ✉.
+  const invited = kind === 'event' ? await invitationOccurrences(from, to, primary.timezone).catch(() => []) : []
+  return [...pages.flat(), ...invited.map(row => row.invitation.status === 'pending'
+    ? { ...row, title: `✉ ${row.title}`, color: PENDING_INVITATION_COLOR } : row)]
 }
 
 function recurrence(draft?: RecurrenceDraft) {

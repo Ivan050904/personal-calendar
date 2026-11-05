@@ -19,7 +19,7 @@ import { resolveCalendarTarget } from '../application/calendar-deep-link'
 import { exactOccurrence } from '../infrastructure/calendar-occurrence-api'
 import { occurrenceEvent } from '../infrastructure/api-calendar-services'
 import { shouldUseApiRepository } from '../infrastructure/api-repositories'
-import { createCalendar, deleteCalendar, getMe, listCalendars, listGrants, patchCalendar, revokeGrant, setCredentials, setOverlayCalendars, type AppGrant, type CalendarV2 } from '../infrastructure/calendars-api'
+import { answerInvitation, createCalendar, deleteCalendar, getMe, listCalendars, listGrants, listInvitations, patchCalendar, revokeGrant, setCredentials, setOverlayCalendars, type AppGrant, type CalendarV2, type Invitation } from '../infrastructure/calendars-api'
 import type { PlansService } from '../application/plans'
 import type { TasksService } from '../application/tasks'
 import type { LocalListsService } from '../application/lists'
@@ -2079,7 +2079,48 @@ function CalendarsSettings({ calendars, onChanged }: { calendars: CalendarV2[]; 
 
 const SCOPE_LABELS: Record<string, string> = {
   openid: 'аккаунт', profile: 'логин и имя', 'calendars.read': 'список календарей',
-  'events.read': 'чтение событий', 'events.write': 'запись в свой календарь',
+  'events.read': 'чтение событий', 'events.write': 'запись в свой календарь', 'sharing.invite': 'приглашения',
+}
+
+const INVITATION_STATUS: Record<Invitation['status'], string> = { pending: 'ждёт ответа', accepted: 'вы идёте', declined: 'вы отказались' }
+
+/** D38: events others invited me to; the answer is the only thing an invitee can change. */
+function Invitations({ onAnswered }: { onAnswered: () => void }) {
+  const [items, setItems] = useState<Invitation[] | undefined>()
+  const [error, setError] = useState<string | undefined>()
+  useEffect(() => {
+    let active = true
+    void listInvitations().then((rows) => { if (active) setItems(rows) }).catch(() => { if (active) setItems([]) })
+    return () => { active = false }
+  }, [])
+  if (items === undefined || items.length === 0) return null
+  const answer = (item: Invitation, status: 'accepted' | 'declined') => {
+    setError(undefined)
+    void answerInvitation(item.event_id, status)
+      .then(() => { setItems((rows) => (rows ?? []).map((row) => (row.id === item.id ? { ...row, status } : row))); onAnswered() })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Не удалось ответить'))
+  }
+  return (
+    <div className="settings-block">
+      <p className="settings-label">Приглашения</p>
+      <ul className="settings-category-list">
+        {items.map((item) => (
+          <li key={item.id}>
+            <div className="composer-row">
+              <span>
+                <b>{item.event.title}</b>
+                <span className="hint"> — {item.event.start_at ? new Date(item.event.start_at).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short', timeZone: item.event.timezone }) : item.event.start_date}
+                  , от {item.organizer.display_name ?? item.organizer.login}; {INVITATION_STATUS[item.status]}</span>
+              </span>
+              {item.status !== 'accepted' && <button type="button" className="btn btn-ghost" onClick={() => answer(item, 'accepted')}>Принять</button>}
+              {item.status !== 'declined' && <button type="button" className="btn btn-ghost" onClick={() => answer(item, 'declined')}>Отклонить</button>}
+            </div>
+          </li>
+        ))}
+      </ul>
+      {error !== undefined && <p className="login-error" role="alert">{error}</p>}
+    </div>
+  )
 }
 
 /** §8.2: accounts made through Folio (or the old env login) set their own login and password once. */
@@ -2200,6 +2241,7 @@ function SettingsSection({
       <h1>Настройки</h1>
 
       {calendars !== undefined && <AccountCredentials />}
+      {calendars !== undefined && <Invitations onAnswered={() => void onCalendarsChanged()} />}
       {calendars !== undefined && <CalendarsSettings calendars={calendars} onChanged={onCalendarsChanged} />}
       {calendars !== undefined && <ConnectedApps calendars={calendars} />}
 

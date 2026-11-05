@@ -22,6 +22,7 @@ it('day board merges events of every visible calendar', async () => {
   setOverlayCalendars([personal, sport, hidden])
   const asked: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (path: string) => {
+    if (path.includes('/invitations/')) return { ok: true, status: 200, json: async () => ({ items: [] }) }
     const id = new URL(path, 'http://x').searchParams.get('calendar_id')!
     asked.push(id)
     return { ok: true, status: 200, json: async () => ({ complete: true, next_cursor: null, items: [{
@@ -33,6 +34,28 @@ it('day board merges events of every visible calendar', async () => {
   const events = await new ApiDayCalendarService(primary).listEvents('2026-11-10')
   expect(asked.sort()).toEqual(['p', 's'])
   expect(events.map(e => [e.calendarId, e.color]).sort()).toEqual([['p', '#000000'], ['s', '#ff0000']])
+})
+
+it('board shows invitations; pending ones greyed with ✉ until answered', async () => {
+  const row = (id: string, status: string) => ({ id, entity_id: id, calendar_id: 'someone-else', kind: 'event', title: id, description: '',
+    timezone: 'UTC', all_day: false, start_at: '2026-11-10T09:00:00Z', end_at: '2026-11-10T10:00:00Z', revision: 1, color: '#123456',
+    location: null, invitation: { id: `a-${id}`, status } })
+  vi.stubGlobal('fetch', vi.fn(async (path: string) => ({ ok: true, status: 200, json: async () => path.includes('/invitations/occurrences')
+    ? { items: [row('ужин', 'pending'), row('кино', 'accepted')] }
+    : { complete: true, next_cursor: null, items: [] } })))
+  const { ApiDayCalendarService } = await import('./api-calendar-services')
+  const primary: Calendar = { id: 'p', name: 'Личное', timezone: 'UTC', createdAt: '', updatedAt: '' }
+  const events = await new ApiDayCalendarService(primary).listEvents('2026-11-10')
+  expect(events.map(e => [e.title, e.color]).sort()).toEqual([['кино', '#123456'], ['✉ ужин', '#94a3b8']])
+})
+
+it('board still loads when the invitations request fails', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (path: string) => path.includes('/invitations/')
+    ? { ok: false, status: 500, json: async () => ({ error: { code: 'database_error', message: 'x' } }) }
+    : { ok: true, status: 200, json: async () => ({ complete: true, next_cursor: null, items: [] }) }))
+  const { ApiDayCalendarService } = await import('./api-calendar-services')
+  const primary: Calendar = { id: 'p', name: 'Личное', timezone: 'UTC', createdAt: '', updatedAt: '' }
+  expect(await new ApiDayCalendarService(primary).listEvents('2026-11-10')).toEqual([])
 })
 
 it('new event goes to the chosen calendar, primary needs no calendar_id', async () => {

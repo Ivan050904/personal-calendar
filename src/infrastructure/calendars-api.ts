@@ -1,4 +1,5 @@
 import { calendarTransport } from './api-repositories'
+import type { CalendarOccurrenceRead } from './calendar-occurrence-api'
 
 /** Calendar as served by /api/v2/calendars (D36). */
 export interface CalendarV2 {
@@ -26,6 +27,26 @@ export function getMe(): Promise<Account> {
 }
 export function setCredentials(body: { login: string; password: string }): Promise<Account> {
   return calendarTransport('/api/v2/me/credentials', { method: 'POST', body: JSON.stringify(body) })
+}
+
+/** An event someone else invited this account to (D38). */
+export type InvitationStatus = 'pending' | 'accepted' | 'declined'
+export interface Invitation {
+  id: string; event_id: string; status: InvitationStatus
+  event: { id: string; title: string; start_at: string | null; start_date: string | null; timezone: string }
+  organizer: { login: string | null; display_name: string | null }
+}
+export type InvitationOccurrence = CalendarOccurrenceRead & { invitation: { id: string; status: InvitationStatus } }
+export function listInvitations(): Promise<Invitation[]> {
+  return calendarTransport('/api/v2/invitations')
+}
+export function answerInvitation(eventId: string, status: 'accepted' | 'declined'): Promise<{ status: InvitationStatus }> {
+  return calendarTransport(`/api/v2/events/${encodeURIComponent(eventId)}/attendees/me`, { method: 'PATCH', body: JSON.stringify({ status }) })
+}
+export async function invitationOccurrences(from: string, to: string, timezone: string): Promise<InvitationOccurrence[]> {
+  const query = new URLSearchParams({ from, to, timezone })
+  const page = await calendarTransport<{ items: InvitationOccurrence[] }>(`/api/v2/invitations/occurrences?${query}`)
+  return page.items
 }
 
 /** An app the user connected via OAuth (D35). */

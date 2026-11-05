@@ -18,7 +18,8 @@ def changes(cursor: str | None = None, limit: int = Query(default=500, ge=1, le=
             db: Session = Depends(get_db), actor: CalendarActor = Depends(require_actor)):
     if actor.client_id:
         require_scope(actor, 'events.read')
-        return feed_page(db, actor.principal_id, actor.grant_id, actor.readable_calendar_ids, cursor, limit)
+        return feed_page(db, actor.principal_id, actor.grant_id, actor.readable_calendar_ids, cursor, limit,
+                         invited='sharing.invite' in actor.scopes)
     require_scope(actor, 'calendar:read')
     return feed_page(db, actor.principal_id, None, None, cursor, limit)
 

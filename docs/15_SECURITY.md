@@ -26,3 +26,8 @@ Sync and webhooks (D37, wave 4):
 - An app's changes feed covers only the calendars it may read, and its cursors are HMAC-signed and bound to that connection.
 - Webhooks go only to https URLs and carry no event data, only a hint and a feed cursor. They are signed with HMAC-SHA256 over `timestamp.body` using a per-subscription secret, which the server must keep in clear to sign.
 - Before every delivery each resolved address of the host must be public (no loopback, private, link-local or metadata ranges); redirects are not followed; the timeout is 5 s. Residual risk: DNS can change between this check and the connection (rebinding). This is accepted for now because only owner-registered apps can add webhooks.
+
+Invitations (D38, wave 6):
+- Only existing, active accounts can be invited, by exact login. Inviting does not reveal anything else about that account.
+- The invitee reads the event through the organizer's identity, only for events they are on, and can change only their own status.
+- Apps touch invitations only with the explicit `sharing.invite` scope; clients do not get it by default.

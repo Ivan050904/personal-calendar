@@ -89,8 +89,11 @@ def mark_pending(db, owner_id: str, calendar_id: str, actor_client_id: str | Non
                       .where(m.OAuthGrantModel.principal_id == owner_id, m.OAuthGrantModel.revoked_at.is_(None),
                              m.WebhookSubscriptionModel.active.is_(True))).all()
     now = datetime.utcnow()
+    calendar = db.get(m.CalendarModel, calendar_id)
+    foreign = calendar is not None and calendar.owner_id != owner_id  # an event this account was invited to
     for sub, grant in rows:
-        if grant.client_id == actor_client_id or calendar_id not in grant_calendar_ids(db, grant):
+        sees = calendar_id in grant_calendar_ids(db, grant) or (foreign and "sharing.invite" in grant.scopes)
+        if grant.client_id == actor_client_id or not sees:
             continue
         if not sub.pending:
             sub.pending, sub.next_attempt_at = True, now
@@ -112,7 +115,8 @@ def dispatch_due(db, now: datetime | None = None, sender=None) -> int:
         db.commit()
         if grant is None or grant.revoked_at is not None:
             continue
-        cursor = feed_cursor(db, grant.principal_id, grant.id, grant_calendar_ids(db, grant))
+        cursor = feed_cursor(db, grant.principal_id, grant.id, grant_calendar_ids(db, grant),
+                             "sharing.invite" in grant.scopes)
         error = sender(sub.url, sub.secret, {"type": "changes", "webhook_id": sub.id, "change_cursor": cursor})
         if error is None:
             sub.failures, sub.first_failed_at, sub.last_error, sub.last_delivered_at = 0, None, None, now

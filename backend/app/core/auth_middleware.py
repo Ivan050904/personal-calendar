@@ -44,8 +44,8 @@ def _app_may_call(method: str, path: str, api_prefix: str) -> bool:
     rel = rel.rstrip("/") or "/"
     if rel == "/v2/calendars":
         return method in {"GET", "HEAD"}
-    if rel in {"/v2/changes", "/v2/agenda", "/v2/history", "/v2/reminder-source"} or rel.startswith(
-            ("/v2/occurrences/", "/v2/confirmations/")):
+    if rel in {"/v2/changes", "/v2/agenda", "/v2/history", "/v2/reminder-source", "/v2/invitations"} or rel.startswith(
+            ("/v2/occurrences/", "/v2/confirmations/", "/v2/invitations/")):
         return method in {"GET", "HEAD"}
     records = ("/v2/events", "/v2/tasks", "/v2/plans", "/v2/webhooks")
     return rel == "/oauth/userinfo" or rel in records or rel.startswith(tuple(r + "/" for r in records))

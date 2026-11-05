@@ -55,7 +55,7 @@ GET /api/occurrences?calendar_id= принимает любой свой кал�
 ## OAuth for apps (D35, wave 3)
 Все пути под `/api` (nginx отдаёт бэкенду только `/api`). Метаданные: `GET /api/.well-known/oauth-authorization-server` (issuer = `<host>/api`).
 Клиентов создаёт владелец: `python backend/scripts/oauth_clients.py create --name <имя> --redirect-uri <uri> [--redirect-uri …] [--scope …] [--public]`, а также `list` и `disable <client_id>`. `redirect_uri` — https (http только для localhost), без `#`. `client_secret` печатается один раз.
-Scopes: `openid`, `profile` (логин и имя), `calendars.read`, `events.read`, `events.write`.
+Scopes: `openid`, `profile` (логин и имя), `calendars.read`, `events.read`, `events.write`, `sharing.invite` (wave 6). `sharing.invite` по умолчанию клиенту не выдаётся: владелец указывает `--scope` явно.
 GET /api/oauth/authorize — `response_type=code, client_id, redirect_uri, scope, state, code_challenge, code_challenge_method=S256`. Неизвестный клиент или чужой `redirect_uri` → страница ошибки без редиректа. Остальные ошибки → `redirect_uri?error=…&state=…` (`invalid_request`, `invalid_scope`, `access_denied`). Без сессии показывается форма входа (POST /api/oauth/login, тот же лимит попыток, что у входа). С сессией — экран согласия; если в запросе есть чтение, пользователь отмечает, какие календари видит приложение. Если разрешение с этими scope уже есть, код выдаётся без экрана.
 POST /api/oauth/authorize — форма согласия (CSRF) → 303 на `redirect_uri?code=…&state=…`. Код одноразовый, 60 с. При `events.write` создаётся календарь приложения (`kind=app`, имя клиента). Если после отзыва он не удалён, используется прежний.
 POST /api/oauth/token — `application/x-www-form-urlencoded`. Клиент: Basic или `client_id`/`client_secret` в форме (публичный — только `client_id`).
@@ -64,7 +64,7 @@ Refresh-токен живёт 30 дней и меняется при каждо�
 Ошибки: `{error, error_description}` — `invalid_client` 401, `invalid_grant` / `unsupported_grant_type` 400, `slow_down` 429.
 POST /api/oauth/revoke — `token` + аутентификация клиента → 200 `{}` (RFC 7009: неизвестный токен тоже 200). Отзывает всё разрешение.
 GET /api/oauth/userinfo — нужен `openid` → `{sub}`; с `profile` ещё `preferred_username`, `name`.
-Bearer-токен приложения открывает только `GET /api/v2/calendars`, `/api/v2/events*`, `/api/v2/tasks*`, `/api/v2/plans*`, GET `/api/v2/agenda`, `/api/v2/occurrences/*`, `/api/v2/confirmations/*`, `/api/v2/history`, `/api/v2/reminder-source`, `/api/v2/changes`, `/api/v2/webhooks*` и `/api/oauth/userinfo`. `/integration/v1` и всё остальное для приложения закрыто. Всё остальное → 403 «Not available to connected apps». Просроченный или отозванный токен → 401.
+Bearer-токен приложения открывает только `GET /api/v2/calendars`, `/api/v2/events*`, `/api/v2/tasks*`, `/api/v2/plans*`, GET `/api/v2/agenda`, `/api/v2/occurrences/*`, `/api/v2/confirmations/*`, `/api/v2/history`, `/api/v2/reminder-source`, GET `/api/v2/invitations*`, `/api/v2/changes`, `/api/v2/webhooks*` и `/api/oauth/userinfo`. `/integration/v1` и всё остальное для приложения закрыто. Всё остальное → 403 «Not available to connected apps». Просроченный или отозванный токен → 401.
 GET /api/v2/grants — только сессия → `[{id, client_id, client_name, scopes, readable_calendar_ids, app_calendar_id, created_at, last_used_at}]`. DELETE /api/v2/grants/{id} → `{id, revoked: true}`, токены гаснут сразу. Чужое разрешение → 404.
 
 ## Events v2 (wave 3)
@@ -115,6 +115,23 @@ DELETE /api/v2/webhooks/{id} → `{id, deleted: true}`; чужой → 404.
 Свои правки приложения не вызывают уведомлений. Много изменений подряд дают одно уведомление.
 Неудача (не 2xx, таймаут 5 с, редирект, адрес не публичный) → повторы через 30 с, 1, 5, 15, 30 мин, затем раз в час, до 24 часов. После этого уведомление снимается; подписка остаётся, лента хранит всё.
 Отзыв подключения останавливает уведомления.
+
+## Invitations (D38, wave 6)
+Событие живёт в календаре организатора; участники — существующие аккаунты, которых приглашают по логину.
+- `POST /api/v2/events/{id}/attendees` — тело `{login}`, только организатор → 201 `{id, event_id, login, display_name, status: "pending", invited_at, responded_at}`.
+  - Повтор того же логина → 200 с той же записью.
+  - Нет такого аккаунта или он отключён → 404; себя → 422.
+  - Приложению нужен `sharing.invite`, и событие должно лежать в его календаре (иначе 403).
+- `GET /api/v2/events/{id}/attendees` → `{organizer: {id, login, display_name}, attendees: [...]}`: организатору и участникам; остальным 404.
+- `PATCH /api/v2/events/{id}/attendees/me` — тело `{status: accepted|declined}`, только участник (иначе 404, другой статус → 422).
+- `GET /api/v2/invitations` → мои приглашения на неудалённые события: `[{...attendee, event: <запись события>, organizer}]`.
+- `GET /api/v2/invitations/occurrences?from=&to=&timezone=` (до 63 дней) → `{items}`: повторы событий, на которые я приглашён и не отказался, в формате occurrences плюс `invitation: {id, status}`. Интерфейс накладывает их на доску: «ждёт ответа» серым и с ✉.
+
+Правила:
+- `GET /api/v2/events/{id}` участнику отдаёт событие с полем `invitation`.
+- Изменить, удалить, подтвердить или пригласить кого-то участник не может: v2 → 403, старый `/api/commands` → 404.
+- Лента изменений: участник получает строки по событию (`invited`, затем каждое изменение организатора), организатор — `responded`. Приложение участника видит эти строки, только если у него есть `sharing.invite`; это же правило действует для webhook.
+- Приложению участника для `/api/v2/invitations*` и ответа нужен `sharing.invite`.
 
 ## Folio bridge switch (wave 5, §8.4)
 `FOLIO_BRIDGE_ENABLED` (по умолчанию `true`). При `false`:

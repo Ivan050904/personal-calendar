@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Calendar platform wave 6 — invitations / shared events (2026-11-06)
+
+- `event_attendees` (Alembic `293a4b5c6d74`, checked on SQLite with upgrade, downgrade and upgrade again).
+- API: `POST`/`GET /api/v2/events/{id}/attendees`, `PATCH …/attendees/me`, `GET /api/v2/invitations`, `GET /api/v2/invitations/occurrences`; new scope `sharing.invite`, not granted to clients by default.
+- Rules: only the organizer edits (an invitee gets 403 on v2 and 404 on the old commands). Invite by existing active login only; inviting the same login twice is idempotent.
+- Feed and webhooks: the invitee's feed gets `invited` and every organizer change; the organizer's feed gets `responded`. The invitee's app sees these only with `sharing.invite`.
+- UI: invitations overlay the board (pending ones greyed with ✉); Settings → «Приглашения» with «Принять/Отклонить»; scope label added.
+- `test_owner_script_validates_redirect_uris` now uses `freebusy.read` as its unknown scope, since `sharing.invite` became real.
+- Two frontend tests mock the new invitations request; added tests for the invitation overlay and for the board loading when that request fails.
+- Verified:
+  - backend 190 passed and 1 real-AI skip (8 new); a mutation check on organizer-only edits, feed mirroring, hiding declined, the app scope, the invitee webhook and inviting yourself turns the tests red;
+  - frontend 89 passed (2 new); tsc and build ok; lint 0 errors (4 existing warnings);
+  - in the browser on a temporary SQLite API: one account invites another, the guest sees «✉ Ужин вдвоём» on the board, accepts in Settings, and the event shows normally. Found and fixed during this check: the Settings list showed the time in the browser's zone; it now uses the event's zone.
+- Not run: the MySQL/MariaDB migration.
+
 ### Calendar platform wave 5 — Folio migration, calendar side (2026-11-06)
 
 - Owner decision D39: API v2 first gets everything Folio uses in `/integration/v1`; old Folio records stay in «Личное», readable but not editable by apps.

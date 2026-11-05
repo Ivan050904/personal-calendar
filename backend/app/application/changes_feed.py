@@ -2,7 +2,7 @@
 from collections.abc import Collection
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.application.occurrences import decode_cursor, encode_cursor
 from app.infrastructure.db import models as m
@@ -14,23 +14,30 @@ def feed_bound(principal_id: str, grant_id: str | None) -> str:
     return f"v2changes|{principal_id}|{grant_id or 'ui'}"
 
 
-def _scope(stmt, principal_id: str, calendar_ids: Collection[str] | None):
+def _scope(stmt, principal_id: str, calendar_ids: Collection[str] | None, invited: bool = False):
     stmt = stmt.where(m.CalendarChangeModel.owner_id == principal_id)
-    return stmt if calendar_ids is None else stmt.where(m.CalendarChangeModel.calendar_id.in_(list(calendar_ids)))
+    if calendar_ids is None:
+        return stmt
+    visible = m.CalendarChangeModel.calendar_id.in_(list(calendar_ids))
+    if invited:  # wave 6: rows about events in other people's calendars that this account was invited to
+        foreign = select(m.CalendarModel.id).where(m.CalendarModel.owner_id != principal_id)
+        visible = or_(visible, m.CalendarChangeModel.calendar_id.in_(foreign))
+    return stmt.where(visible)
 
 
-def feed_cursor(db, principal_id: str, grant_id: str | None, calendar_ids: Collection[str] | None) -> str:
-    last = db.scalar(_scope(select(m.CalendarChangeModel.id), principal_id, calendar_ids)
+def feed_cursor(db, principal_id: str, grant_id: str | None, calendar_ids: Collection[str] | None,
+                invited: bool = False) -> str:
+    last = db.scalar(_scope(select(m.CalendarChangeModel.id), principal_id, calendar_ids, invited)
                      .order_by(m.CalendarChangeModel.id.desc()).limit(1)) or 0
     return encode_cursor(feed_bound(principal_id, grant_id), last)
 
 
 def feed_page(db, principal_id: str, grant_id: str | None, calendar_ids: Collection[str] | None,
-              cursor: str | None, limit: int) -> dict:
+              cursor: str | None, limit: int, invited: bool = False) -> dict:
     """`calendar_ids=None` means every calendar of the account (the calendar UI)."""
     bound = feed_bound(principal_id, grant_id)
     offset = decode_cursor(cursor, bound)
-    rows = db.scalars(_scope(select(m.CalendarChangeModel), principal_id, calendar_ids)
+    rows = db.scalars(_scope(select(m.CalendarChangeModel), principal_id, calendar_ids, invited)
                       .where(m.CalendarChangeModel.id > offset).order_by(m.CalendarChangeModel.id).limit(limit + 1)).all()
     page = rows[:limit]
     continuation = encode_cursor(bound, page[-1].id if page else offset)

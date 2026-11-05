@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.application.agenda import build_agenda
+from app.application import invitations
 from app.application.calendar_commands import execute_calendar_command
 from app.application.occurrences import entity_read
 from app.core.calendar_actor import CalendarActor, require_actor, require_owned_calendar, require_scope
@@ -47,13 +48,26 @@ def write_actor(actor: CalendarActor) -> CalendarActor:
     return actor
 
 
-def owned_row(db: Session, actor: CalendarActor, model, entity_id: str, deleted_ok: bool = False):
+def owned_row(db: Session, actor: CalendarActor, model, entity_id: str, deleted_ok: bool = False, write: bool = False):
     row = db.get(model, entity_id)
     if row is None or (row.deleted_at is not None and not deleted_ok):
         raise AppError('not_found', 'Not found', status_code=404)
+    if model is m.EventModel and invited_to(db, actor, row):
+        if write:
+            raise AppError('forbidden', 'Only the organizer changes this event', status_code=403)
+        if actor.client_id:
+            require_scope(actor, 'sharing.invite')
+        return row
     require_owned_calendar(db, actor, row.calendar_id)
     can_read(actor, row.calendar_id)
     return row
+
+
+def invited_to(db: Session, actor: CalendarActor, row) -> bool:
+    """D38: the event is someone else's and this account is on its attendee list."""
+    calendar = db.get(m.CalendarModel, row.calendar_id)
+    return (calendar is not None and calendar.owner_id != actor.principal_id
+            and invitations.attendance(db, row.id, actor.principal_id) is not None)
 
 
 def external_ids(db: Session, items: list[dict]) -> list[dict]:
@@ -112,7 +126,7 @@ def build_router(path: str, kind: str, model) -> APIRouter:
 
     def mutate(db, actor, entity_id, operation, payload, if_match, idempotency_key, occurrence_key=None, scope=None):
         writer = write_actor(actor)
-        row = owned_row(db, actor, model, entity_id, deleted_ok=operation == 'restore')
+        row = owned_row(db, actor, model, entity_id, deleted_ok=operation == 'restore', write=True)
         if actor.client_id and row.calendar_id != actor.app_calendar_id:
             raise AppError('forbidden', 'Apps change only records in their own calendar', status_code=403)
         return with_external(db, _command(db, writer, {
@@ -134,6 +148,10 @@ def build_router(path: str, kind: str, model) -> APIRouter:
     @router.get('/{entity_id}')
     def show(entity_id: str, db: Session = Depends(get_db), actor: CalendarActor = Depends(require_actor)):
         row = owned_row(db, actor, model, entity_id)
+        if kind == 'event' and invited_to(db, actor, row):
+            mine = invitations.attendance(db, row.id, actor.principal_id)
+            return {**entity_read(db, invitations.organizer_reader(db, row), row, kind), 'external_id': None,
+                    'invitation': {'id': mine.id, 'status': mine.status}}
         return {**entity_read(db, actor, row, kind), 'external_id': row.external_id}
 
     @router.post('', status_code=201)

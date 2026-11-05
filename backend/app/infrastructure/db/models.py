@@ -343,3 +343,15 @@ class WebhookSubscriptionModel(Base):
     last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
     last_delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
+
+
+class EventAttendeeModel(Base):
+    """D38 (wave 6): an account invited to an event that lives in the organizer's calendar."""
+    __tablename__ = 'event_attendees'
+    __table_args__ = (UniqueConstraint('event_id', 'principal_id', name='uq_event_attendee'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(64), ForeignKey('events.id'), nullable=False, index=True)
+    principal_id: Mapped[str] = mapped_column(String(64), ForeignKey('calendar_principals.id'), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default='pending')  # pending | accepted | declined
+    invited_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, default=utcnow)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)

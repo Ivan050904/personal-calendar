@@ -4,7 +4,7 @@ import { createApiRepositories } from './api-repositories'
 
 afterEach(() => vi.unstubAllGlobals())
 it('API calendar reads the server occurrence and never expands raw entities', async () => {
-  const fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ items: [{ id: 'e::2026-10-08T09:00', entity_id: 'e', calendar_id: 'c', kind: 'event', title: 'Projected', description: '', timezone: 'UTC', all_day: false, start_at: '2026-10-08T09:00:00Z', end_at: '2026-10-08T10:00:00Z', revision: 2, color: '#000', location: null }], complete: true, next_cursor: null }) }))
+  const fetch = vi.fn(async (path: string) => path.includes('/invitations/') ? { ok: true, status: 200, json: async () => ({ items: [] }) } : ({ ok: true, status: 200, json: async () => ({ items: [{ id: 'e::2026-10-08T09:00', entity_id: 'e', calendar_id: 'c', kind: 'event', title: 'Projected', description: '', timezone: 'UTC', all_day: false, start_at: '2026-10-08T09:00:00Z', end_at: '2026-10-08T10:00:00Z', revision: 2, color: '#000', location: null }], complete: true, next_cursor: null }) }))
   vi.stubGlobal('fetch', fetch)
   const { ApiDayCalendarService } = await import('./api-calendar-services')
   const calendar: Calendar = { id: 'c', name: 'Own', timezone: 'UTC', createdAt: '', updatedAt: '' }
@@ -12,7 +12,8 @@ it('API calendar reads the server occurrence and never expands raw entities', as
   const items = await services.listEvents('2026-10-08')
   expect(items[0]?.id).toBe('e::2026-10-08T09:00')
   expect(items[0]?.revision).toBe(2)
-  expect(fetch).toHaveBeenCalledTimes(1)
+  // One occurrence page; the only other request is the invitations overlay (D38).
+  expect(fetch.mock.calls.map(([path]) => String(path).includes('/invitations/') ? 'invitations' : 'occurrences').sort()).toEqual(['invitations', 'occurrences'])
 })
 it('task completion sends authoritative complete command with original due', async () => {
   const requests: Array<Record<string, unknown>> = []
