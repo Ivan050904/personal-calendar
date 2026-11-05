@@ -417,3 +417,42 @@ def test_metadata(server):
     meta = server.get("/api/.well-known/oauth-authorization-server").json()
     assert meta["code_challenge_methods_supported"] == ["S256"]
     assert meta["token_endpoint"].endswith("/api/oauth/token")
+
+
+# --- concurrent redemption (security review fix) ------------------------------------------
+
+def test_code_redeemed_by_a_concurrent_request_counts_as_replay(user, server):
+    """Request B loaded the code before request A redeemed it; B must not get a second set of tokens."""
+    from app.application import oauth
+    from app.infrastructure.db.models import OAuthAuthorizationCodeModel, OAuthClientModel
+    from app.infrastructure.db.session import SessionLocal
+    client_id, _ = register_client()
+    verifier, challenge = pkce()
+    code = code_from(consent(user, auth_params(client_id, challenge)))
+    with SessionLocal() as a, SessionLocal() as b:
+        late_client = b.get(OAuthClientModel, client_id)
+        stale = b.get(OAuthAuthorizationCodeModel, oauth.digest(code))  # held, so B keeps this view
+        assert stale.used_at is None
+        first = oauth.exchange_code(a, a.get(OAuthClientModel, client_id), code, REDIRECT, verifier)
+        a.commit()
+        with pytest.raises(oauth.OAuthError):
+            oauth.exchange_code(b, late_client, code, REDIRECT, verifier)
+        b.commit()
+    assert server.get("/api/oauth/userinfo", headers=bearer(first["access_token"])).status_code == 401
+
+
+def test_refresh_token_used_by_a_concurrent_request_counts_as_reuse(user, server):
+    from app.application import oauth
+    from app.infrastructure.db.models import OAuthClientModel, OAuthTokenModel
+    from app.infrastructure.db.session import SessionLocal
+    client_id, _, tokens = connect(user, server)
+    with SessionLocal() as a, SessionLocal() as b:
+        late_client = b.get(OAuthClientModel, client_id)
+        stale = b.get(OAuthTokenModel, oauth.digest(tokens["refresh_token"]))  # held, so B keeps this view
+        assert stale.revoked_at is None
+        fresh = oauth.refresh(a, a.get(OAuthClientModel, client_id), tokens["refresh_token"])
+        a.commit()
+        with pytest.raises(oauth.OAuthError):
+            oauth.refresh(b, late_client, tokens["refresh_token"])
+        b.commit()
+    assert server.get("/api/oauth/userinfo", headers=bearer(fresh["access_token"])).status_code == 401

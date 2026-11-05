@@ -193,12 +193,16 @@ def exchange_code(db: Session, client: m.OAuthClientModel, code: str, redirect_u
     if row is None or row.client_id != client.id:
         raise OAuthError("invalid_grant", "Invalid authorization code")
     grant = db.get(m.OAuthGrantModel, row.grant_id)
-    if row.used_at is not None:
+    # Claim the code in one conditional UPDATE, so two concurrent requests cannot both redeem it.
+    claimed = db.execute(update(m.OAuthAuthorizationCodeModel)
+                         .where(m.OAuthAuthorizationCodeModel.code_hash == row.code_hash,
+                                m.OAuthAuthorizationCodeModel.used_at.is_(None))
+                         .values(used_at=datetime.utcnow())).rowcount
+    if claimed != 1:
         # Replayed code: everything issued under this grant is suspect.
         revoke_grant(db, grant)
         raise OAuthError("invalid_grant", "Authorization code already used")
-    row.used_at = datetime.utcnow()
-    db.flush()
+    db.refresh(row)
     if row.expires_at <= datetime.utcnow() or row.redirect_uri != redirect_uri or grant.revoked_at is not None:
         raise OAuthError("invalid_grant", "Invalid authorization code")
     if not PKCE_RE.fullmatch(verifier or ""):
@@ -221,8 +225,16 @@ def refresh(db: Session, client: m.OAuthClientModel, refresh_token: str) -> dict
         raise OAuthError("invalid_grant", "Invalid refresh token")
     if row.expires_at <= datetime.utcnow() or grant.revoked_at is not None:
         raise OAuthError("invalid_grant", "Invalid refresh token")
+    # Claim the refresh token in one conditional UPDATE; the loser of a concurrent race is a reuse.
+    claimed = db.execute(update(m.OAuthTokenModel)
+                         .where(m.OAuthTokenModel.token_hash == row.token_hash, m.OAuthTokenModel.revoked_at.is_(None))
+                         .values(revoked_at=datetime.utcnow())).rowcount
+    if claimed != 1:
+        revoke_grant(db, grant)
+        raise OAuthError("invalid_grant", "Invalid refresh token")
     body, new_hash = _issue_tokens(db, grant)
-    row.revoked_at, row.replaced_by = datetime.utcnow(), new_hash
+    db.refresh(row)
+    row.replaced_by = new_hash
     db.flush()
     return body
 

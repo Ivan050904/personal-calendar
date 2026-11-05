@@ -6,6 +6,7 @@ import pytest
 
 from test_calendar_oauth import (PASSWORD, auth_params, bearer, code_from, consent, exchange, new_client, new_event,  # noqa: F401
                                  personal_id, pkce, register_client, server, user)
+from test_calendar_folio_migration import bridge, bridge_token, hide_created_rows, session_for  # noqa: F401
 
 DAY = {"from": "2026-11-12", "to": "2026-11-12"}
 WITH_INVITES = "openid profile calendars.read events.read events.write sharing.invite"
@@ -171,3 +172,28 @@ def test_invitees_webhook_fires_when_organizer_changes_event(user, guest, server
     with SessionLocal() as db:
         dispatch_due(db, now=datetime.utcnow(), sender=lambda url, secret, payload: sent.append(url))
     assert "https://couples.example/hook" in sent
+
+
+def test_folio_bridge_needs_calendar_scopes_for_invitations(user, server, bridge):
+    """A narrowly scoped Folio bridge token reads invitations only with calendar:read
+    and answers only with calendar:write (security review fix)."""
+    from app.core.bridge_auth import principal_id
+    sub = f"folio-{uuid4().hex[:8]}"
+    server.post("/api/integration/v1/connect", json={"timezone": "UTC", "idempotency_key": str(uuid4())},
+                headers=bearer(bridge_token(sub)))
+    invitee = session_for(principal_id(sub))
+    login = f"fi-{uuid4().hex[:8]}"
+    assert invitee.post("/api/v2/me/credentials", json={"login": login, "password": PASSWORD}).status_code == 200
+    event = ui_event(user)
+    assert user.post(f"/api/v2/events/{event['id']}/attendees", json={"login": login}).status_code == 201
+
+    no_read = bearer(bridge_token(sub, scopes=("calendar:connect",)))
+    read_only = bearer(bridge_token(sub, scopes=("calendar:read",)))
+    assert server.get("/api/v2/invitations", headers=no_read).status_code == 403
+    assert server.get("/api/v2/invitations/occurrences", params=DAY, headers=no_read).status_code == 403
+    assert [i["event"]["id"] for i in server.get("/api/v2/invitations", headers=read_only).json()] == [event["id"]]
+    assert server.patch(f"/api/v2/events/{event['id']}/attendees/me", json={"status": "accepted"},
+                        headers=read_only).status_code == 403
+    assert server.patch(f"/api/v2/events/{event['id']}/attendees/me", json={"status": "accepted"},
+                        headers=bearer(bridge_token(sub))).status_code == 200
+    invitee.__exit__(None, None, None)

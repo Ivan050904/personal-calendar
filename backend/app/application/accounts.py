@@ -33,6 +33,16 @@ def _validate_login(login: str) -> str:
     return value
 
 
+def _reserve_legacy_login(value: str, principal_id: str | None = None) -> None:
+    """While the env login works, its name belongs to the env owner: an own account with that name
+    would shadow it (own accounts are tried first), locking the owner out."""
+    from app.core.config import get_settings
+    s = get_settings()
+    if (s.legacy_auth_enabled and normalize_login(s.auth_username) == value
+            and (principal_id is None or principal_id != s.legacy_principal_id)):
+        raise AppError("conflict", "Логин занят", status_code=409)
+
+
 def _validate_password(password: str) -> None:
     if not isinstance(password, str) or not PASSWORD_MIN <= len(password) <= PASSWORD_MAX:
         raise AppError("validation_error", f"Пароль: от {PASSWORD_MIN} до {PASSWORD_MAX} символов", status_code=422)
@@ -57,6 +67,7 @@ def create_account(db: Session, login: str, password: str, display_name: str | N
         ZoneInfo(timezone)
     except (ZoneInfoNotFoundError, ValueError):
         raise AppError("validation_error", "Invalid timezone", status_code=422) from None
+    _reserve_legacy_login(value)
     if find_by_login(db, value) is not None:
         raise AppError("conflict", "Логин занят", status_code=409)
     principal = CalendarPrincipalModel(id=str(uuid4()), login=value, password_hash=_hasher.hash(password),
@@ -84,6 +95,7 @@ def set_credentials(db: Session, principal_id: str, login: str, password: str) -
         raise AppError("conflict", "У аккаунта уже есть логин", status_code=409)
     value = _validate_login(login)
     _validate_password(password)
+    _reserve_legacy_login(value, principal_id)
     if find_by_login(db, value) is not None:
         raise AppError("conflict", "Логин занят", status_code=409)
     row.login, row.password_hash = value, _hasher.hash(password)

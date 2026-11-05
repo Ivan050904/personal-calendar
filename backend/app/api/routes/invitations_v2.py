@@ -20,9 +20,9 @@ def _event(db: Session, event_id: str) -> EventModel:
     return row
 
 
-def _as_attendee(actor: CalendarActor) -> None:
-    if actor.client_id:
-        require_scope(actor, 'sharing.invite')
+def _as_attendee(actor: CalendarActor, scope: str = 'calendar:read') -> None:
+    """Apps need sharing.invite; everyone else (UI session, Folio bridge) the internal scope."""
+    require_scope(actor, 'sharing.invite' if actor.client_id else scope)
 
 
 def _body_text(body: dict, key: str) -> str:
@@ -70,7 +70,7 @@ def attendees(event_id: str, db: Session = Depends(get_db), actor: CalendarActor
 @router.patch('/events/{event_id}/attendees/me')
 def answer(event_id: str, body: dict = Body(...), db: Session = Depends(get_db),
            actor: CalendarActor = Depends(require_actor)):
-    _as_attendee(actor)
+    _as_attendee(actor, 'calendar:write')
     row = invitations.respond(db, actor, _event(db, event_id), _body_text(body, 'status'))
     db.commit()
     return invitations.attendee_read(db, row)

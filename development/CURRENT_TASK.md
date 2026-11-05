@@ -28,7 +28,7 @@ Not done:
 - nothing pushed or deployed (push to `main` auto-deploys, D20).
 
 Next (owner decides):
-- the security review promised after wave 3;
+- ~~the security review promised after wave 3~~ — done 2026-11-06, low findings fixed (see CHANGELOG);
 - MySQL checks of the migrations;
 - deployment;
 - Folio's own migration via the handoff;

@@ -239,3 +239,25 @@ def test_bridge_and_oauth_share_data_then_bridge_switches_off(server, bridge):
     assert server.get("/api/auth/folio", params={"code": "anything"}).status_code == 401
     assert server.get(f"/api/v2/events/{via_oauth['id']}", headers=new).status_code == 200  # OAuth keeps working
     ui.__exit__(None, None, None)
+
+
+def test_env_login_name_stays_with_the_env_owner(server, bridge):
+    """An own account named like the env login would shadow it and lock the owner out (security review fix)."""
+    from app.application.accounts import create_account
+    from app.core.bridge_auth import principal_id
+    from app.core.errors import AppError
+    from app.infrastructure.db.session import SessionLocal
+    reserved = get_settings_value("auth_username")
+    sub = f"folio-{uuid4().hex[:8]}"
+    server.post("/api/integration/v1/connect", json={"timezone": "UTC", "idempotency_key": str(uuid4())}, headers=bearer(bridge_token(sub)))
+    ui = session_for(principal_id(sub))
+    assert ui.post("/api/v2/me/credentials", json={"login": reserved.upper(), "password": PASSWORD}).status_code == 409
+    with SessionLocal() as db, pytest.raises(AppError) as err:
+        create_account(db, reserved, PASSWORD)
+    assert err.value.status_code == 409
+    ui.__exit__(None, None, None)
+
+
+def get_settings_value(name):
+    from app.core.config import get_settings
+    return getattr(get_settings(), name)

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Security review of waves 1–6 and small fixes (2026-11-06)
+
+- Review of the whole branch against `main`: no high or medium findings.
+- Fixed the low ones:
+  - an OAuth code or refresh token used by two concurrent requests now counts as a replay (conditional UPDATE) and revokes the connection;
+  - while the env login is on, its name is reserved for the env owner;
+  - the Folio bridge needs `calendar:read` / `calendar:write` for invitations.
+- Left as accepted risk: login CSRF through `/auth/folio?code=`, which disappears when the bridge is switched off.
+- Tests:
+  - 4 new; each fails on the old code. The two race tests keep the stale row loaded in a second DB session.
+  - The invitations test module reuses the cleanup fixture from wave 5.
+- Verified: backend 194 passed and 1 skipped. The frontend did not change.
+
 ### Calendar platform wave 6 — invitations / shared events (2026-11-06)
 
 - `event_attendees` (Alembic `293a4b5c6d74`, checked on SQLite with upgrade, downgrade and upgrade again).

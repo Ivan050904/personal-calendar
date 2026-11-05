@@ -41,7 +41,7 @@ POST /api/v2/accounts — `{login, password, display_name?, timezone?}` → 201 
 GET /api/v2/me — `{id, login, display_name}`.
 POST /api/v2/me/password — `{current_password, new_password}`; только сессия (не токен приложения → 403); неверный текущий → 401; отзывает все сессии, кроме текущей.
 POST /api/v2/me/sessions/revoke-others — только сессия → `{revoked: N}`.
-POST /api/v2/me/credentials (wave 5, §8.2/§8.5) — `{login, password}`, только сессия → `{id, login, display_name}`. Для аккаунта без логина: созданного через Folio или старого входа из env. Аккаунт и данные те же, дальше вход обычный. Логин уже задан или занят → 409; формат логина или пароля → 422. В настройках интерфейса для таких аккаунтов есть блок «Логин и пароль».
+POST /api/v2/me/credentials (wave 5, §8.2/§8.5) — `{login, password}`, только сессия → `{id, login, display_name}`. Для аккаунта без логина: созданного через Folio или старого входа из env. Аккаунт и данные те же, дальше вход обычный. Логин уже задан или занят → 409 (пока работает старый вход из env, его логин занят за владельцем); формат логина или пароля → 422. В настройках интерфейса для таких аккаунтов есть блок «Логин и пароль».
 Владелец: `python backend/scripts/accounts.py create <login> [--name] [--timezone]` и `reset-password <login>` печатают одноразовый временный пароль; сброс отзывает все сессии.
 
 ## Calendars (D36, wave 2)
@@ -131,7 +131,7 @@ DELETE /api/v2/webhooks/{id} → `{id, deleted: true}`; чужой → 404.
 - `GET /api/v2/events/{id}` участнику отдаёт событие с полем `invitation`.
 - Изменить, удалить, подтвердить или пригласить кого-то участник не может: v2 → 403, старый `/api/commands` → 404.
 - Лента изменений: участник получает строки по событию (`invited`, затем каждое изменение организатора), организатор — `responded`. Приложение участника видит эти строки, только если у него есть `sharing.invite`; это же правило действует для webhook.
-- Приложению участника для `/api/v2/invitations*` и ответа нужен `sharing.invite`.
+- Приложению участника для `/api/v2/invitations*` и ответа нужен `sharing.invite`. Мосту Folio — `calendar:read` для чтения и `calendar:write` для ответа.
 
 ## Folio bridge switch (wave 5, §8.4)
 `FOLIO_BRIDGE_ENABLED` (по умолчанию `true`). При `false`:

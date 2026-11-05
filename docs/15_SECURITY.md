@@ -27,6 +27,13 @@ Sync and webhooks (D37, wave 4):
 - Webhooks go only to https URLs and carry no event data, only a hint and a feed cursor. They are signed with HMAC-SHA256 over `timestamp.body` using a per-subscription secret, which the server must keep in clear to sign.
 - Before every delivery each resolved address of the host must be public (no loopback, private, link-local or metadata ranges); redirects are not followed; the timeout is 5 s. Residual risk: DNS can change between this check and the connection (rebinding). This is accepted for now because only owner-registered apps can add webhooks.
 
+Security review of waves 1–6 (2026-11-06): no high or medium findings. Fixed afterwards:
+- OAuth codes and refresh tokens are claimed with one conditional UPDATE. Two concurrent requests cannot both redeem one; the loser is treated as a replay and the grant is revoked.
+- While the env login is on, its name cannot be taken by an own account (registration, owner script, `POST /v2/me/credentials`), except by the env owner's principal itself.
+- Invitation reads and answers by the Folio bridge need `calendar:read` / `calendar:write`.
+
+Accepted risk: login CSRF through `/auth/folio?code=` (an attacker's launch code signs a victim into the attacker's account). It goes away when `FOLIO_BRIDGE_ENABLED=false`.
+
 Invitations (D38, wave 6):
 - Only existing, active accounts can be invited, by exact login. Inviting does not reveal anything else about that account.
 - The invitee reads the event through the organizer's identity, only for events they are on, and can change only their own status.
