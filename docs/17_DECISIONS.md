@@ -65,3 +65,13 @@ D31 — Calendar/Folio integration v2 (2026-10-09, local authorized R0–R5): su
 D32 — Supersedes D21 device-write bootstrap: opening a different device/display zone preserves calendar timezone and all event instants, with zero write requests. Server UTC-aware wire, date-only all-day exclusive bounds, bounded recurrence projection; ISO weekdays1..7. Monthly day31 clamps; DST gaps skip without consuming count, folds select earlier instant. Original occurrence identity survives moves.
 
 D33 — Extends D24/D28: source calendar owns commands, revisions, receipts and voluntary confirmation facts. PC API task completion uses server commands; elapsed events create no facts. Rolling completion stores original due before advancing beyond happened_date; stale undo cannot roll back later completion. Folio owns background delivery preferences; browser reminders remain best effort. Existing presets preserved, 10/20 added.
+
+D34 — Calendar platform (2026-11-05, spec `18_CALENDAR_PLATFORM.md`): the calendar is a standalone service with its own accounts — login + password (Argon2id, `argon2-cffi`), no email at all (no verification, no mail reset; owner resets passwords and creates accounts by script). Registration endpoint exists behind `REGISTRATION_ENABLED=false` until anti-abuse protection is specified. Supersedes D17 «No multi-user accounts, OAuth» and replaces the Folio-derived identity of D31.
+
+D35 — Apps connect only via OAuth 2.0 Authorization Code + PKCE (S256), registered clients only (owner script), consent screen per account, hashed rotating tokens (access 15 min, refresh 30 days with reuse detection). Server is hand-written in the project (authlib has no FastAPI server integration). Folio shared service token and HMAC bridge (D31) run in parallel until Folio migration completes, then are removed.
+
+D36 — An account has many calendars: «Личное», one app calendar per connected app with write scope, and user-created ones; each has a colour and visibility and the UI overlays all visible calendars. An app writes only into its own app calendar and reads only calendars the user ticked on consent.
+
+D37 — Sync: `(source_client_id, external_id)` unique per calendar; the per-grant changes feed with `actor` is the source of truth; webhooks are HMAC-signed notifications only. Existing Idempotency-Key and revision conflicts stay.
+
+D38 — Shared events (couples app): attendees by login with pending/accepted/declined in the organizer's calendar; only the organizer edits. Co-owned calendars are deferred.

@@ -2,9 +2,12 @@
 
 ## Unreleased
 
-### Calendar platform spec draft (2026-11-05)
+### Calendar platform spec (2026-11-05)
 
-- Added `docs/18_CALENDAR_PLATFORM.md`: own accounts, OAuth 2.0 (Authorization Code + PKCE) for connected apps, multiple calendars with per-app permissions, sync (external IDs, changes feed, webhooks), attendees for shared events, Folio migration, waves 1–6. Draft only: proposed D34–D38 not yet in `17_DECISIONS.md`; no code changes.
+- Added `docs/18_CALENDAR_PLATFORM.md`, approved by the owner: own accounts (login + password, no email), OAuth 2.0 Authorization Code + PKCE for registered apps, multiple calendars with per-app write calendars and an overlay view, sync (external IDs, changes feed, webhooks), attendees for shared events, Folio migration, waves 1–6.
+- Recorded D34–D38 in `17_DECISIONS.md` (D34 supersedes D17's no-accounts/OAuth rule).
+- Added `development/handoff/FOLIO_OAUTH_MIGRATION.md` for the Folio agent (start only after calendar waves 3 and 5 are live).
+- No code changes; wave 1 not started.
 
 ### Calendar review closure (2026-10-10)
 

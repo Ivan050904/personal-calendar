@@ -1,16 +1,9 @@
 # Current Task
 
-Calendar integration with Folio — local provider implementation complete, 2026-10-10.
+Calendar Platform — wave 1 (accounts and login). **Not started**: waiting for the owner's go-ahead.
 
-Four Important review findings fixed with regression tests: historical rolling completion correction, count-limited series split, moved occurrence exact lookup in source zone, and read-base revision/due preservation in task/plan drafts/actions. Fresh verification: backend95 passed/1 skipped (real AI smoke requires credentials); frontend83 passed; production build/typecheck exit0; lint exit0 with four existing warnings. Folio coordinator owns its final acceptance report. No production push/deploy or legacy import. Stop after handoff.
+Spec: `docs/18_CALENDAR_PLATFORM.md` (§3, §11 wave 1). Decisions: D34–D38 in `docs/17_DECISIONS.md`.
 
-Authorized by user on 2026-10-08: "газ календарь делать".
+Previous task (Calendar/Folio integration R0–R5, 2026-10-10) is complete and committed on `codex/calendar-integration` (ba4bb8d). Its production rollout, push/deploy and legacy import were not performed and remain outside this task.
 
-Requirements and explicit new public contracts:
-- C:/Users/Пользователь/Desktop/Folio2/docs/superpowers/specs/2026-10-08-calendar-integration-design.md
-- C:/Users/Пользователь/Desktop/Folio2/docs/superpowers/plans/2026-10-08-calendar-provider-implementation.md
-- C:/Users/Пользователь/Desktop/Folio2/docs/superpowers/plans/2026-10-08-calendar-integration.md
-
-First isolate test storage, then owner/auth/time/projections, commands/history, and UI parity. Update docs/17_DECISIONS.md for D17/D21/D24/D28 changes before behavior changes. Existing personal data ownership is never guessed or assigned to synthetic test users. Shared router registration and linear Alembic revisions are coordinated by root.
-
-Local development is authorized across the planned waves. Production rollout, push/main auto-deploy, personal DB migration and real Telegram delivery are not part of this task. After the final report update CHANGELOG and stop.
+Wave 1 scope: login + password accounts (Argon2id, new dependency `argon2-cffi`), sessions on existing `calendar_sessions`, «Личное» created with the account, owner scripts (create account, reset password), `POST /api/v2/accounts` behind `REGISTRATION_ENABLED=false`, login rate limit. Existing Folio bridge and legacy login keep working. Run the wave 1 test plan and regression check, update CHANGELOG, stop before wave 2.
