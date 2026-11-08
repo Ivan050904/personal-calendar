@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Production line merged; each Folio account keeps its own calendar (2026-11-09)
+
+- `origin/main` (the October bridge) is merged into the calendar platform. The October code that opened every Folio account inside the owner's session is not the running path.
+- A Folio account still reaches the calendar through the signed bridge. Connect creates that account's own calendar. Another account cannot read it.
+- Production already applied migration `b7e1a2c94d10` (column `calendars.folio_user_id`). Ownership migration `b2c3d4e5f607` now follows it, so `alembic upgrade head` continues from the live database. The column stays unused: the account id lives on `calendar_principals`.
+- `FOLIO_SERVER_CLIENT_ID` defaults to `personal-calendar`, the same id Folio already sends.
+
 ### Case-sensitive external_id on MySQL/MariaDB (2026-11-06)
 
 - Owner's decision: an app's `external_id` is opaque and case-sensitive. `Lesson-1` and `lesson-1` are two records on every database.

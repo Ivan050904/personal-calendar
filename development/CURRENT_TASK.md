@@ -24,12 +24,11 @@ Known limits:
 
 Not done:
 - migrations and the backend suite checked on MariaDB 13.0.2 and on `mariadb:11` (11.8.9) (2026-11-06); `external_id` made case-sensitive there (`utf8mb4_bin`);
-- the separate security review after wave 3 has not been run;
-- nothing pushed or deployed (push to `main` auto-deploys, D20).
+- the separate security review after wave 3 has not been run.
 
 Next (owner decides):
 - ~~the security review promised after wave 3~~ — done 2026-11-06, low findings fixed (see CHANGELOG);
 - ~~MySQL checks of the migrations~~ — done on MariaDB 13.0.2, see CHANGELOG;
-- deployment;
+- ~~deployment~~ — owner asked 2026-11-09 to merge the October production line and push `main` (auto-deploy, D20). The calendar on the server was off. Registration stays closed;
 - Folio's own migration via the handoff;
 - anti-abuse protection before opening registration.

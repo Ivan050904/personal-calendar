@@ -3,7 +3,8 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = 'b2c3d4e5f607'
-down_revision = 'a1b2c3d4e5f6'
+# Production already applied b7e1a2c94d10. This keeps that revision in the chain.
+down_revision = 'b7e1a2c94d10'
 branch_labels = None
 depends_on = None
 

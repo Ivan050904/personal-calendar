@@ -170,6 +170,26 @@ def bridge(monkeypatch):
     return get_settings()
 
 
+def test_folio_accounts_do_not_share_a_calendar(server, bridge):
+    """The production bug: every Folio account opened the owner's calendar."""
+    from app.core.bridge_auth import principal_id
+    first, second = f"folio-{uuid4().hex[:8]}", f"folio-{uuid4().hex[:8]}"
+    a, b = bearer(bridge_token(first)), bearer(bridge_token(second))
+    own = server.post("/api/integration/v1/connect", json={"timezone": "Asia/Vladivostok", "idempotency_key": str(uuid4())}, headers=a)
+    other = server.post("/api/integration/v1/connect", json={"timezone": "Asia/Vladivostok", "idempotency_key": str(uuid4())}, headers=b)
+    assert own.status_code == 200 and other.status_code == 200, (own.text, other.text)
+    assert own.json()["id"] != other.json()["id"]
+    assert own.json()["owner_id"] == principal_id(first)
+    assert other.json()["owner_id"] == principal_id(second)
+    command_id = str(uuid4())
+    made = server.post("/api/integration/v1/commands", headers={**a, "Idempotency-Key": command_id},
+                       json={"command_id": command_id, "kind": "event", "operation": "create", "payload": new_event("Только моё")})
+    assert made.status_code == 200, made.text
+    assert server.get("/api/integration/v1/agenda", params={"calendar_id": own.json()["id"], **DAY}, headers=b).status_code == 404
+    page = server.get("/api/integration/v1/agenda", params=DAY, headers=b)
+    assert page.status_code == 200 and page.json()["items"] == [], page.text
+
+
 def test_folio_account_sets_login_and_password_once(server, bridge):
     from app.core.bridge_auth import principal_id
     from app.core import login_rate_limit

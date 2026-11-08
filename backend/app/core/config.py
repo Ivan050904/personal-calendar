@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     calendar_bridge_secret: str = ""
     folio_exchange_base_url: str = ""
     folio_exchange_secret: str = ""
-    folio_server_client_id: str = ""
+    folio_server_client_id: str = "personal-calendar"
     legacy_sso_enabled: bool = False
     # Open self-registration stays off until anti-abuse protection exists (D34).
     registration_enabled: bool = False
