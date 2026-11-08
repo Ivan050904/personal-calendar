@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Deploy target is 168.113.169.26 (2026-11-09)
+
+- Production is no longer the Beget address `155.212.132.213`. Push to `main` deploys to `168.113.169.26` with `RITM_SSH_KEY`.
+- The host nginx site `calendar.folio-one.ru` is left as it is. It already proxies the domain to the calendar.
+
 ### Production line merged; each Folio account keeps its own calendar (2026-11-09)
 
 - `origin/main` (the October bridge) is merged into the calendar platform. The October code that opened every Folio account inside the owner's session is not the running path.

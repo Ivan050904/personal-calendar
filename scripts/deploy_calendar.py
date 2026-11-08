@@ -18,7 +18,7 @@ from pathlib import Path
 
 import paramiko
 
-HOST = "155.212.132.213"
+HOST = "168.113.169.26"
 USER = "root"
 DOMAIN = "calendar.folio-one.ru"
 APP_DIR = "/opt/personal-calendar"
@@ -389,6 +389,10 @@ def ensure_nginx(client: paramiko.SSHClient, https: bool) -> None:
 
 
 def try_ssl(client: paramiko.SSHClient) -> None:
+    code, _, _ = run(client, "test -f /etc/nginx/sites-enabled/calendar.folio-one.ru.conf")
+    if code == 0:
+        print("Host nginx already serves calendar.folio-one.ru; leaving that file")
+        return
     ensure_nginx(client, https=False)
     run(client, "mkdir -p /var/www/certbot")
     run(
@@ -419,14 +423,29 @@ def wait_api(client: paramiko.SSHClient) -> None:
     raise SystemExit("API did not become healthy")
 
 
+def connect() -> paramiko.SSHClient:
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    key_text = (os.environ.get("RITM_SSH_KEY") or os.environ.get("DEPLOY_SSH_KEY") or "").strip()
+    if key_text:
+        key = paramiko.Ed25519Key.from_private_key(io.StringIO(key_text))
+        client.connect(HOST, username=USER, pkey=key, timeout=30, allow_agent=False, look_for_keys=False)
+        return client
+    key_path = Path.home() / ".ssh" / "ritm_admin"
+    if key_path.exists():
+        key = paramiko.Ed25519Key.from_private_key_file(str(key_path))
+        client.connect(HOST, username=USER, pkey=key, timeout=30, allow_agent=False, look_for_keys=False)
+        return client
+    client.connect(HOST, username=USER, password=password(), timeout=30)
+    return client
+
+
 def main() -> None:
     print(f"Packing {ROOT} …")
     bundle = build_tarball()
     print(f"Bundle {len(bundle)} bytes")
 
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(HOST, username=USER, password=password(), timeout=30)
+    client = connect()
 
     # Persist DB password across redeploys if container already exists
     db_password = secrets.token_urlsafe(18)

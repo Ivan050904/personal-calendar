@@ -39,7 +39,7 @@ jobs:
       - name: Install deploy deps
         run: pip install paramiko
 
-      - name: Deploy to Beget
+      - name: Deploy
         env:
-          BEGET_SSH_PASSWORD: ${{ secrets.BEGET_SSH_PASSWORD }}
+          RITM_SSH_KEY: ${{ secrets.RITM_SSH_KEY }}
         run: python scripts/deploy_calendar.py

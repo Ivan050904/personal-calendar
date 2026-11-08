@@ -29,6 +29,6 @@ Not done:
 Next (owner decides):
 - ~~the security review promised after wave 3~~ — done 2026-11-06, low findings fixed (see CHANGELOG);
 - ~~MySQL checks of the migrations~~ — done on MariaDB 13.0.2, see CHANGELOG;
-- ~~deployment~~ — owner asked 2026-11-09 to merge the October production line and push `main` (auto-deploy, D20). The calendar on the server was off. Registration stays closed;
+- ~~deployment~~ — on `168.113.169.26` as of 2026-11-09 (`4b5c6d7e8f96`). Registration stays closed;
 - Folio's own migration via the handoff;
 - anti-abuse protection before opening registration.
